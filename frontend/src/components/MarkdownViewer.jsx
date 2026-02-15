@@ -12,6 +12,25 @@ import { File } from 'lucide-react';
 
 const lowlight = createLowlight(common);
 
+// Custom Image Extension with Width Support (Read-Only)
+const CustomImage = Image.extend({
+    addAttributes() {
+        return {
+            ...this.parent?.(),
+            width: {
+                default: null,
+                renderHTML: attributes => {
+                    if (!attributes.width) return {};
+                    return {
+                        width: attributes.width,
+                        style: `width: ${attributes.width}`
+                    };
+                },
+            },
+        };
+    },
+});
+
 export default function MarkdownViewer({ token, fileInfo }) {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
@@ -29,9 +48,12 @@ export default function MarkdownViewer({ token, fileInfo }) {
                 lowlight,
             }),
             Typography,
-            Image,
+            CustomImage.configure({
+                inline: true,
+                allowBase64: true,
+            }),
             Markdown.configure({
-                html: false,
+                html: true, // Allow HTML to support resized images
             }),
         ],
         editorProps: {

@@ -55,17 +55,25 @@ export default function MarkdownEditor({ file, onClose }) {
                 lowlight,
             }),
             Typography,
-            Image,
+            CustomImage.configure({
+                inline: true,
+                allowBase64: true,
+            }),
             Link.configure({
                 openOnClick: false,
+                autolink: true,
             }),
             Placeholder.configure({
                 placeholder: 'Start writing...',
             }),
             Markdown.configure({
-                html: false,
+                html: true, // Allow HTML to support saving resized images
                 transformPastedText: true,
                 transformCopiedText: true,
+                transform: {
+                    // Start with default transformation
+                    ...Markdown.default?.transform,
+                }
             }),
         ],
         editorProps: {
