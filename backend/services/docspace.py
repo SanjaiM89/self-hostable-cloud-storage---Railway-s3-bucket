@@ -9,8 +9,11 @@ except ImportError:
     from database import SessionLocal
     from models import File as FileModel
 
-DOCSPACE_URL = os.getenv("DOCSPACE_URL", "https://docspace-7ru0rj.onlyoffice.com")
-DOCSPACE_API_KEY = os.getenv("DOCSPACE_API_KEY", "sk-8a6d73fa4043e677682f2f6c7150d01936184e57b91c5f7cf94486f2eeb69ba4")
+DOCSPACE_URL = os.getenv("DOCSPACE_URL", "https://docspace-7ru0rj.onlyoffice.com").strip()
+DOCSPACE_API_KEY = os.getenv("DOCSPACE_API_KEY", "sk-8a6d73fa4043e677682f2f6c7150d01936184e57b91c5f7cf94486f2eeb69ba4").strip()
+
+# DEBUG: Print loaded URL (masked)
+print(f"DEBUG Loop DOCSPACE_URL: {DOCSPACE_URL}")
 
 class DocSpaceClient:
     def __init__(self):
