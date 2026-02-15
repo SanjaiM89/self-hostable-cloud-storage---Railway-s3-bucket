@@ -199,6 +199,10 @@ def get_shared_file(token: str, db: Session = Depends(get_db)):
     if not file:
         raise HTTPException(status_code=404, detail="File no longer exists")
 
+    # Look up sharer username
+    shared_by_user = db.query(User).filter(User.id == share.created_by).first()
+    shared_by_name = shared_by_user.username if shared_by_user else "Unknown"
+
     return {
         "file_id": file.id,
         "name": file.name,
@@ -207,6 +211,7 @@ def get_shared_file(token: str, db: Session = Depends(get_db)):
         "is_folder": file.is_folder,
         "permission": share.permission,
         "share_type": share.share_type,
+        "shared_by": shared_by_name,
         "created_at": str(file.created_at),
     }
 
@@ -292,5 +297,9 @@ def get_shared_editor_config(token: str, db: Session = Depends(get_db)):
 
     token_jwt = pyjwt.encode(config, onlyoffice_secret, algorithm="HS256")
     config["token"] = token_jwt
+
+    # Add sharer info (outside JWT, just for frontend display)
+    shared_by_user = db.query(User).filter(User.id == share.created_by).first()
+    config["shared_by"] = shared_by_user.username if shared_by_user else "Unknown"
 
     return config

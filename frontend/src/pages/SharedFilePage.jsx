@@ -117,6 +117,11 @@ export default function SharedFilePage() {
                     <span className="ml-2 text-[10px] text-[var(--text-tertiary)] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)]">
                         {fileInfo.permission === 'view' ? 'View Only' : fileInfo.permission === 'download' ? 'View & Download' : 'Editing'}
                     </span>
+                    {fileInfo.shared_by && (
+                        <span className="ml-3 text-[11px] text-[var(--text-secondary)]">
+                            Shared by <strong className="text-[var(--accent)]">{fileInfo.shared_by}</strong>
+                        </span>
+                    )}
                     {fileInfo.permission !== 'view' && (
                         <button
                             onClick={handleDownload}
@@ -138,9 +143,14 @@ export default function SharedFilePage() {
                 <div className="p-8 text-center">
                     <File className="w-16 h-16 mx-auto text-[var(--accent)] mb-4" />
                     <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">{fileInfo.name}</h2>
-                    <p className="text-[13px] text-[var(--text-tertiary)] mb-6">
+                    <p className="text-[13px] text-[var(--text-tertiary)] mb-1">
                         {(fileInfo.size / 1024).toFixed(1)} KB • Shared file
                     </p>
+                    {fileInfo.shared_by && (
+                        <p className="text-[13px] text-[var(--text-secondary)] mb-5">
+                            Shared by <strong className="text-[var(--accent)]">{fileInfo.shared_by}</strong>
+                        </p>
+                    )}
 
                     {fileInfo.permission === 'view' ? (
                         <p className="text-[13px] text-[var(--text-secondary)]">
