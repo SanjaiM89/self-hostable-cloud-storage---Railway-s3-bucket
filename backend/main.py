@@ -2,10 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 try:
     from .database import engine, Base
-    from .routers import auth, files, sharing, webhooks
+    from .routers import auth, files, sharing
 except ImportError:
     from database import engine, Base
-    from routers import auth, files, sharing, webhooks
+    from routers import auth, files, sharing
 
 # Create tables
 try:
@@ -31,6 +31,7 @@ app = FastAPI(title="Cloud Storage API")
 origins = [
     "http://localhost:5173", # Vite default
     "http://localhost:3000",
+    "https://self-hostable-cloud-storage-railway-flax.vercel.app", # Add specific frontend
 ]
 
 app.add_middleware(
@@ -49,4 +50,4 @@ def read_root():
 app.include_router(auth.router)
 app.include_router(files.router)
 app.include_router(sharing.router)
-app.include_router(webhooks.router)
+# app.include_router(webhooks.router) # Removed as file was deleted
