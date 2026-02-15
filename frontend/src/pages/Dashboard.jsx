@@ -324,8 +324,9 @@ export default function Dashboard() {
                         {editingFile && (
                             <div style={{
                                 position: 'fixed',
-                                bottom: '20px',
-                                right: '20px',
+                                top: '8px',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
                                 zIndex: 999999,
                                 pointerEvents: 'none',
                                 transition: 'opacity 0.3s ease',
