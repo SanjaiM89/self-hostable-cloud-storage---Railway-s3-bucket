@@ -115,6 +115,80 @@ async def upload_file(
     }
 
 
+# ─── Presigned Upload URL (bypasses Vercel body limit) ───
+
+class PresignedUploadRequest(BaseModel):
+    filename: str
+    content_type: str = "application/octet-stream"
+    parent_id: Optional[int] = None
+
+@router.post("/upload-url")
+def get_upload_url(
+    data: PresignedUploadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a presigned PUT URL for direct S3 upload from browser."""
+    file_id = str(uuid.uuid4())
+    s3_key = f"{current_user.username}/{file_id}-{data.filename}"
+    
+    try:
+        presigned_url = s3_client.generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': BUCKET_NAME,
+                'Key': s3_key,
+                'ContentType': data.content_type,
+            },
+            ExpiresIn=600,  # 10 minutes
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate upload URL: {str(e)}")
+    
+    return {
+        "upload_url": presigned_url,
+        "s3_key": s3_key,
+        "filename": data.filename,
+        "content_type": data.content_type,
+    }
+
+
+class FileRegister(BaseModel):
+    filename: str
+    s3_key: str
+    size: int
+    content_type: str = "application/octet-stream"
+    parent_id: Optional[int] = None
+
+@router.post("/register")
+def register_uploaded_file(
+    data: FileRegister,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Register a file in the DB after it was uploaded directly to S3."""
+    new_file = FileModel(
+        name=data.filename,
+        s3_key=data.s3_key,
+        size=data.size,
+        mime_type=data.content_type,
+        parent_id=data.parent_id,
+        user_id=current_user.id,
+        is_folder=False,
+    )
+    db.add(new_file)
+    db.commit()
+    db.refresh(new_file)
+    
+    return {
+        "id": new_file.id,
+        "name": new_file.name,
+        "s3_key": new_file.s3_key,
+        "size": new_file.size,
+        "mime_type": new_file.mime_type,
+    }
+
+
 @router.post("/folder")
 def create_folder(
     folder: FolderCreate,

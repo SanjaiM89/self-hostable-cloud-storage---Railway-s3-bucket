@@ -38,11 +38,43 @@ export const filesAPI = {
         if (parentId !== null) params.parent_id = parentId;
         return api.get('/files/', { params });
     },
-    upload: (formData, onProgress) =>
-        api.post('/files/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            onUploadProgress: onProgress,
-        }),
+    upload: async (formData, onProgress) => {
+        const file = formData.get('file');
+        const parentId = formData.get('parent_id');
+
+        // Step 1: Get presigned upload URL from backend
+        const { data: urlData } = await api.post('/files/upload-url', {
+            filename: file.name,
+            content_type: file.type || 'application/octet-stream',
+            parent_id: parentId || null,
+        });
+
+        // Step 2: Upload file directly to S3 using presigned URL
+        await new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', urlData.upload_url);
+            xhr.setRequestHeader('Content-Type', urlData.content_type);
+            if (onProgress) {
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        onProgress({ loaded: e.loaded, total: e.total });
+                    }
+                };
+            }
+            xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`S3 upload failed: ${xhr.status}`));
+            xhr.onerror = () => reject(new Error('S3 upload network error'));
+            xhr.send(file);
+        });
+
+        // Step 3: Register the file in the database
+        return api.post('/files/register', {
+            filename: urlData.filename,
+            s3_key: urlData.s3_key,
+            size: file.size,
+            content_type: urlData.content_type,
+            parent_id: parentId || null,
+        });
+    },
     download: (fileId) => api.get(`/files/download/${fileId}`),
     createFolder: (name, parentId = null) =>
         api.post('/files/folder', { name, parent_id: parentId }),
