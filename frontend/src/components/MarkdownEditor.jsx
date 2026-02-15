@@ -72,37 +72,99 @@ export default function MarkdownEditor({ file, onClose }) {
         onClose();
     }, [content, originalContent, saveContent, onClose]);
 
-    // Image upload handler
+    // Image upload helper
+    const uploadImage = useCallback(async (imgFile) => {
+        try {
+            setSaveStatus('saving');
+            const formData = new FormData();
+            formData.append('file', imgFile);
+            const result = await filesAPI.upload(formData);
+            const fileData = result.data;
+
+            // Get download URL for the uploaded image
+            const dlRes = await filesAPI.download(fileData.id);
+            const imageUrl = dlRes.data.url;
+
+            // Insert markdown image
+            const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
+            setContent(prev => prev + imgMarkdown);
+            setSaveStatus('unsaved');
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => saveContent(content + imgMarkdown), 1500);
+        } catch (err) {
+            console.error('Image upload failed:', err);
+            setSaveStatus('error');
+        }
+    }, [content, saveContent]);
+
+    // Image upload via button
     const handleImageUpload = useCallback(async () => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
         input.onchange = async (e) => {
             const imgFile = e.target.files[0];
-            if (!imgFile) return;
-
-            try {
-                const formData = new FormData();
-                formData.append('file', imgFile);
-                const result = await filesAPI.upload(formData);
-                const fileData = result.data;
-
-                // Get download URL for the uploaded image
-                const dlRes = await filesAPI.download(fileData.id);
-                const imageUrl = dlRes.data.url;
-
-                // Insert markdown image at cursor
-                const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
-                setContent(prev => prev + imgMarkdown);
-                setSaveStatus('unsaved');
-                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                saveTimerRef.current = setTimeout(() => saveContent(content + imgMarkdown), 1500);
-            } catch (err) {
-                console.error('Image upload failed:', err);
-            }
+            if (imgFile) uploadImage(imgFile);
         };
         input.click();
-    }, [content, saveContent]);
+    }, [uploadImage]);
+
+    // Clipboard paste handler (Ctrl+V)
+    useEffect(() => {
+        const handlePaste = async (e) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+
+            for (let i = 0; i < items.length; i++) {
+                if (items[i].type.indexOf('image') !== -1) {
+                    e.preventDefault();
+                    const blob = items[i].getAsFile();
+                    if (blob) {
+                        // Create a file from blob with timestamp name
+                        const file = new File([blob], `pasted-${Date.now()}.png`, { type: blob.type });
+                        uploadImage(file);
+                    }
+                    break;
+                }
+            }
+        };
+
+        document.addEventListener('paste', handlePaste);
+        return () => document.removeEventListener('paste', handlePaste);
+    }, [uploadImage]);
+
+    // Drag and drop handler
+    useEffect(() => {
+        const handleDragOver = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        };
+
+        const handleDrop = async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const files = e.dataTransfer?.files;
+            if (!files || files.length === 0) return;
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (file.type.startsWith('image/')) {
+                    uploadImage(file);
+                }
+            }
+        };
+
+        const editorEl = document.querySelector('.w-md-editor');
+        if (editorEl) {
+            editorEl.addEventListener('dragover', handleDragOver);
+            editorEl.addEventListener('drop', handleDrop);
+            return () => {
+                editorEl.removeEventListener('dragover', handleDragOver);
+                editorEl.removeEventListener('drop', handleDrop);
+            };
+        }
+    }, [uploadImage]);
 
     // Badge styles
     const badgeStyle = {
