@@ -1,14 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import MDEditor from '@uiw/react-md-editor';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
+import rehypeRaw from 'rehype-raw';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { filesAPI } from '../utils/api';
-import { ArrowLeft, Save, Upload as UploadIcon } from 'lucide-react';
+import {
+    Eye, Edit3, Columns, Image as ImageIcon,
+    Bold, Italic, Code, Heading, List, Link,
+    Save, ArrowLeft
+} from 'lucide-react';
 
 export default function MarkdownEditor({ file, onClose }) {
     const [content, setContent] = useState('');
     const [originalContent, setOriginalContent] = useState('');
     const [saveStatus, setSaveStatus] = useState('saved');
+    const [viewMode, setViewMode] = useState('split'); // 'edit', 'preview', 'split'
     const [loading, setLoading] = useState(true);
     const saveTimerRef = useRef(null);
+    const textareaRef = useRef(null);
 
     // Load file content
     useEffect(() => {
@@ -41,13 +52,14 @@ export default function MarkdownEditor({ file, onClose }) {
         }
     }, [file.id]);
 
-    const handleChange = useCallback((value) => {
-        setContent(value);
+    const handleChange = useCallback((e) => {
+        const newContent = e.target.value;
+        setContent(newContent);
         setSaveStatus('unsaved');
 
         // Debounced auto-save (1.5s)
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => saveContent(value), 1500);
+        saveTimerRef.current = setTimeout(() => saveContent(newContent), 1500);
     }, [saveContent]);
 
     // Save on Ctrl+S
@@ -85,12 +97,31 @@ export default function MarkdownEditor({ file, onClose }) {
             const dlRes = await filesAPI.download(fileData.id);
             const imageUrl = dlRes.data.url;
 
-            // Insert markdown image
-            const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
-            setContent(prev => prev + imgMarkdown);
-            setSaveStatus('unsaved');
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-            saveTimerRef.current = setTimeout(() => saveContent(content + imgMarkdown), 1500);
+            // Insert markdown image at cursor
+            const ta = textareaRef.current;
+            if (ta) {
+                const pos = ta.selectionStart;
+                const before = content.substring(0, pos);
+                const after = content.substring(pos);
+                const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
+                const newContent = before + imgMarkdown + after;
+                setContent(newContent);
+
+                // Restore cursor after image
+                setTimeout(() => {
+                    ta.focus();
+                    ta.selectionStart = ta.selectionEnd = pos + imgMarkdown.length;
+                }, 0);
+
+                setSaveStatus('unsaved');
+                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = setTimeout(() => saveContent(newContent), 1500);
+            } else {
+                // Fallback if ref unavailable (rare)
+                const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
+                setContent(prev => prev + imgMarkdown);
+            }
+
         } catch (err) {
             console.error('Image upload failed:', err);
             setSaveStatus('error');
@@ -112,6 +143,9 @@ export default function MarkdownEditor({ file, onClose }) {
     // Clipboard paste handler (Ctrl+V)
     useEffect(() => {
         const handlePaste = async (e) => {
+            // Only handle if textarea is focused
+            if (document.activeElement !== textareaRef.current) return;
+
             const items = e.clipboardData?.items;
             if (!items) return;
 
@@ -120,7 +154,6 @@ export default function MarkdownEditor({ file, onClose }) {
                     e.preventDefault();
                     const blob = items[i].getAsFile();
                     if (blob) {
-                        // Create a file from blob with timestamp name
                         const file = new File([blob], `pasted-${Date.now()}.png`, { type: blob.type });
                         uploadImage(file);
                     }
@@ -135,6 +168,9 @@ export default function MarkdownEditor({ file, onClose }) {
 
     // Drag and drop handler
     useEffect(() => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+
         const handleDragOver = (e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -155,16 +191,33 @@ export default function MarkdownEditor({ file, onClose }) {
             }
         };
 
-        const editorEl = document.querySelector('.w-md-editor');
-        if (editorEl) {
-            editorEl.addEventListener('dragover', handleDragOver);
-            editorEl.addEventListener('drop', handleDrop);
-            return () => {
-                editorEl.removeEventListener('dragover', handleDragOver);
-                editorEl.removeEventListener('drop', handleDrop);
-            };
-        }
+        ta.addEventListener('dragover', handleDragOver);
+        ta.addEventListener('drop', handleDrop);
+        return () => {
+            ta.removeEventListener('dragover', handleDragOver);
+            ta.removeEventListener('drop', handleDrop);
+        };
     }, [uploadImage]);
+
+
+    // Toolbar insert helpers
+    const insertAtCursor = useCallback((before, after = '') => {
+        const ta = textareaRef.current;
+        if (!ta) return;
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const selected = content.substring(start, end);
+        const newContent = content.substring(0, start) + before + selected + after + content.substring(end);
+        setContent(newContent);
+        setSaveStatus('unsaved');
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => saveContent(newContent), 1500);
+        setTimeout(() => {
+            ta.focus();
+            ta.selectionStart = start + before.length;
+            ta.selectionEnd = start + before.length + selected.length;
+        }, 0);
+    }, [content, saveContent]);
 
     // Badge styles
     const badgeStyle = {
@@ -200,10 +253,10 @@ export default function MarkdownEditor({ file, onClose }) {
             height: '100%', display: 'flex', flexDirection: 'column',
             background: 'var(--bg-primary)', color: 'var(--text-primary)',
             fontFamily: "'Inter', -apple-system, sans-serif",
-        }} data-color-mode="dark">
+        }}>
             {/* Toolbar */}
             <div style={{
-                height: '42px', display: 'flex', alignItems: 'center', gap: '8px',
+                height: '42px', display: 'flex', alignItems: 'center', gap: '2px',
                 padding: '0 12px', borderBottom: '1px solid var(--border-color)',
                 background: 'var(--card-bg)', flexShrink: 0,
             }}>
@@ -217,7 +270,35 @@ export default function MarkdownEditor({ file, onClose }) {
                     marginRight: '8px',
                 }}>{file.name}</span>
 
-                <button onClick={handleImageUpload} style={toolBtnStyle} title="Upload image"><UploadIcon size={14} /></button>
+                {/* Format buttons */}
+                <button onClick={() => insertAtCursor('**', '**')} style={toolBtnStyle} title="Bold"><Bold size={14} /></button>
+                <button onClick={() => insertAtCursor('*', '*')} style={toolBtnStyle} title="Italic"><Italic size={14} /></button>
+                <button onClick={() => insertAtCursor('# ')} style={toolBtnStyle} title="Heading"><Heading size={14} /></button>
+                <button onClick={() => insertAtCursor('`', '`')} style={toolBtnStyle} title="Inline code"><Code size={14} /></button>
+                <button onClick={() => insertAtCursor('\n```\n', '\n```\n')} style={toolBtnStyle} title="Code block">
+                    <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 700 }}>{'{ }'}</span>
+                </button>
+                <button onClick={() => insertAtCursor('- ')} style={toolBtnStyle} title="List"><List size={14} /></button>
+                <button onClick={() => insertAtCursor('[', '](url)')} style={toolBtnStyle} title="Link"><Link size={14} /></button>
+                <button onClick={handleImageUpload} style={toolBtnStyle} title="Upload image"><ImageIcon size={14} /></button>
+                <span style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 6px' }} />
+
+                {/* View mode toggles */}
+                <button onClick={() => setViewMode('edit')} style={{
+                    ...toolBtnStyle,
+                    background: viewMode === 'edit' ? 'var(--accent)' : undefined,
+                    color: viewMode === 'edit' ? '#1e1e2e' : undefined,
+                }} title="Edit only"><Edit3 size={14} /></button>
+                <button onClick={() => setViewMode('split')} style={{
+                    ...toolBtnStyle,
+                    background: viewMode === 'split' ? 'var(--accent)' : undefined,
+                    color: viewMode === 'split' ? '#1e1e2e' : undefined,
+                }} title="Split view"><Columns size={14} /></button>
+                <button onClick={() => setViewMode('preview')} style={{
+                    ...toolBtnStyle,
+                    background: viewMode === 'preview' ? 'var(--accent)' : undefined,
+                    color: viewMode === 'preview' ? '#1e1e2e' : undefined,
+                }} title="Preview only"><Eye size={14} /></button>
 
                 {/* Save status */}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -234,80 +315,138 @@ export default function MarkdownEditor({ file, onClose }) {
                 </div>
             </div>
 
-            {/* WYSIWYG Markdown Editor */}
-            <div style={{ flex: 1, overflow: 'auto', padding: '0' }}>
-                <MDEditor
-                    value={content}
-                    onChange={handleChange}
-                    height="100%"
-                    preview="live"
-                    hideToolbar={false}
-                    enableScroll={true}
-                    visibleDragbar={false}
-                    style={{
-                        background: 'var(--bg-primary)',
-                        color: 'var(--text-primary)',
-                    }}
-                />
+            {/* Editor + Preview panes */}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+                {/* Editor pane */}
+                {(viewMode === 'edit' || viewMode === 'split') && (
+                    <div style={{
+                        flex: 1, display: 'flex', flexDirection: 'column',
+                        borderRight: viewMode === 'split' ? '1px solid var(--border-color)' : 'none',
+                    }}>
+                        <textarea
+                            ref={textareaRef}
+                            value={content}
+                            onChange={handleChange}
+                            spellCheck={false}
+                            style={{
+                                flex: 1, resize: 'none', border: 'none', outline: 'none',
+                                padding: '20px 24px',
+                                background: 'var(--bg-primary)',
+                                color: 'var(--text-primary)',
+                                fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace",
+                                fontSize: '13.5px', lineHeight: '1.7',
+                                tabSize: 4,
+                            }}
+                            onKeyDown={(e) => {
+                                // Tab support
+                                if (e.key === 'Tab') {
+                                    e.preventDefault();
+                                    const start = e.target.selectionStart;
+                                    const end = e.target.selectionEnd;
+                                    const newContent = content.substring(0, start) + '    ' + content.substring(end);
+                                    setContent(newContent);
+                                    setTimeout(() => {
+                                        e.target.selectionStart = e.target.selectionEnd = start + 4;
+                                    }, 0);
+                                }
+                            }}
+                        />
+                    </div>
+                )}
+
+                {/* Preview pane */}
+                {(viewMode === 'preview' || viewMode === 'split') && (
+                    <div style={{
+                        flex: 1, overflowY: 'auto', padding: '24px 32px',
+                        background: 'var(--bg-secondary, #181825)',
+                    }}>
+                        <div className="markdown-preview" style={{ maxWidth: '800px', margin: '0 auto' }}>
+                            <ReactMarkdown
+                                remarkPlugins={[remarkGfm, remarkBreaks]}
+                                rehypePlugins={[rehypeRaw]}
+                                components={{
+                                    code({ node, inline, className, children, ...props }) {
+                                        const match = /language-(\w+)/.exec(className || '');
+                                        return !inline && match ? (
+                                            <SyntaxHighlighter
+                                                style={oneDark}
+                                                language={match[1]}
+                                                PreTag="div"
+                                                customStyle={{
+                                                    borderRadius: '8px',
+                                                    fontSize: '13px',
+                                                    margin: '16px 0',
+                                                }}
+                                                {...props}
+                                            >
+                                                {String(children).replace(/\n$/, '')}
+                                            </SyntaxHighlighter>
+                                        ) : !inline ? (
+                                            <SyntaxHighlighter
+                                                style={oneDark}
+                                                language="text"
+                                                PreTag="div"
+                                                customStyle={{
+                                                    borderRadius: '8px',
+                                                    fontSize: '13px',
+                                                    margin: '16px 0',
+                                                }}
+                                                {...props}
+                                            >
+                                                {String(children).replace(/\n$/, '')}
+                                            </SyntaxHighlighter>
+                                        ) : (
+                                            <code style={{
+                                                background: 'rgba(255,255,255,0.08)',
+                                                padding: '2px 6px', borderRadius: '4px',
+                                                fontSize: '0.9em', fontFamily: 'monospace',
+                                                color: '#f38ba8',
+                                            }} {...props}>
+                                                {children}
+                                            </code>
+                                        );
+                                    },
+                                    img({ src, alt, ...props }) {
+                                        return (
+                                            <img
+                                                src={src} alt={alt || ''}
+                                                style={{
+                                                    maxWidth: '100%', borderRadius: '8px',
+                                                    margin: '12px 0', cursor: 'pointer',
+                                                }}
+                                                {...props}
+                                            />
+                                        );
+                                    },
+                                }}
+                            >
+                                {content}
+                            </ReactMarkdown>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* Custom dark theme styles */}
+            {/* Markdown preview styles */}
             <style>{`
-                .w-md-editor {
-                    background: var(--bg-primary) !important;
-                    color: var(--text-primary) !important;
-                    border: none !important;
-                }
-                .w-md-editor-toolbar {
-                    background: var(--card-bg) !important;
-                    border-bottom: 1px solid var(--border-color) !important;
-                }
-                .w-md-editor-toolbar button {
-                    color: var(--text-secondary) !important;
-                }
-                .w-md-editor-toolbar button:hover {
-                    background: rgba(255,255,255,0.05) !important;
-                }
-                .w-md-editor-text-pre, .w-md-editor-text-input {
-                    background: var(--bg-primary) !important;
-                    color: var(--text-primary) !important;
-                }
-                .w-md-editor-preview {
-                    background: var(--bg-secondary, #181825) !important;
-                }
-                .wmde-markdown {
-                    background: transparent !important;
-                    color: var(--text-primary) !important;
-                }
-                .wmde-markdown h1 { border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
-                .wmde-markdown h2 { border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
-                .wmde-markdown code {
-                    background: rgba(255,255,255,0.08);
-                    padding: 2px 6px;
-                    border-radius: 4px;
-                    color: #f38ba8;
-                }
-                .wmde-markdown pre {
-                    background: rgba(0,0,0,0.3) !important;
-                    border-radius: 8px;
-                }
-                .wmde-markdown a {
-                    color: var(--accent);
-                }
-                .wmde-markdown blockquote {
-                    border-left: 3px solid var(--accent);
-                    background: rgba(255,255,255,0.03);
-                    border-radius: 0 6px 6px 0;
-                }
-                .wmde-markdown table {
-                    border-collapse: collapse;
-                }
-                .wmde-markdown th, .wmde-markdown td {
-                    border: 1px solid var(--border-color);
-                }
-                .wmde-markdown th {
-                    background: rgba(255,255,255,0.05);
-                }
+                .markdown-preview { color: var(--text-primary); }
+                .markdown-preview h1 { font-size: 2em; font-weight: 700; margin: 24px 0 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
+                .markdown-preview h2 { font-size: 1.5em; font-weight: 600; margin: 20px 0 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
+                .markdown-preview h3 { font-size: 1.25em; font-weight: 600; margin: 16px 0 8px; }
+                .markdown-preview h4 { font-size: 1.1em; font-weight: 600; margin: 14px 0 6px; }
+                .markdown-preview p { margin: 8px 0; line-height: 1.7; }
+                .markdown-preview ul, .markdown-preview ol { padding-left: 24px; margin: 8px 0; }
+                .markdown-preview li { margin: 4px 0; line-height: 1.6; }
+                .markdown-preview blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 12px 0; background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; }
+                .markdown-preview a { color: var(--accent); text-decoration: none; }
+                .markdown-preview a:hover { text-decoration: underline; }
+                .markdown-preview table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+                .markdown-preview th, .markdown-preview td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; }
+                .markdown-preview th { background: rgba(255,255,255,0.05); font-weight: 600; }
+                .markdown-preview hr { border: none; border-top: 1px solid var(--border-color); margin: 20px 0; }
+                .markdown-preview pre { margin: 0 !important; }
+                .markdown-preview strong { font-weight: 600; }
+                .markdown-preview em { font-style: italic; }
             `}</style>
         </div>
     );
