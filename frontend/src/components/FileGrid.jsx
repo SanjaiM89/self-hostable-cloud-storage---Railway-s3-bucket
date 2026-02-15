@@ -43,7 +43,14 @@ const formatSize = (bytes) => {
 
 const formatDate = (dateStr) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
+    // Backend stores UTC timestamps — ensure the browser parses them as UTC
+    let utcStr = dateStr;
+    if (!utcStr.endsWith('Z') && !utcStr.includes('+') && !utcStr.includes('T')) {
+        utcStr = utcStr.replace(' ', 'T') + 'Z';
+    } else if (!utcStr.endsWith('Z') && utcStr.includes('T') && !utcStr.includes('+')) {
+        utcStr = utcStr + 'Z';
+    }
+    const d = new Date(utcStr);
     const now = new Date();
     const diffMs = now - d;
     const diffMins = Math.floor(diffMs / 60000);
