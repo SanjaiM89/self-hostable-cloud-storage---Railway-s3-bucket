@@ -30,9 +30,6 @@ export default function MarkdownViewer({ token, fileInfo }) {
             }),
             Typography,
             Image,
-            Link.configure({
-                openOnClick: true,
-            }),
             Markdown.configure({
                 html: false,
             }),
