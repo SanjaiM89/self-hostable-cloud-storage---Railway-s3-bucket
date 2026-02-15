@@ -325,6 +325,8 @@ async def onlyoffice_callback(
         # but usually sends it if secret is set.
         pass
 
+    status = body.get("status")
+    
     # Status 2 = Ready for saving, 6 = Force Save
     # We want to save on BOTH to keep S3 updated.
     if status == 2 or status == 6:
