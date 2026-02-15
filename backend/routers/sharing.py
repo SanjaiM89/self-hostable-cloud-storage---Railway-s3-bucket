@@ -20,28 +20,6 @@ except ImportError:
     from storage import generate_presigned_url, s3_client, BUCKET_NAME
 from fastapi.security import OAuth2PasswordBearer
 
-# ... (omitted code) ...
-
-@router.get("/public/{token}/content")
-def get_shared_content(token: str, db: Session = Depends(get_db)):
-    """Fetch raw content for shared files (e.g. .md)."""
-    share = db.query(FileShare).filter(FileShare.share_token == token).first()
-    if not share:
-        raise HTTPException(status_code=404, detail="Share link not found")
-
-    file = db.query(FileModel).filter(FileModel.id == share.file_id).first()
-    if not file or not file.s3_key:
-        raise HTTPException(status_code=404, detail="File not found")
-
-    # Fetch from S3
-    try:
-        obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
-        content = obj['Body'].read().decode('utf-8')
-        return {"content": content}
-    except Exception as e:
-        print(f"Error reading file content: {e}")
-        raise HTTPException(status_code=500, detail="Could not read file content")
-
 router = APIRouter(prefix="/shares", tags=["shares"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -339,7 +317,6 @@ def get_shared_content(token: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="File not found")
 
     # Fetch from S3
-    from ..storage import s3_client, BUCKET_NAME
     try:
         obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
         content = obj['Body'].read().decode('utf-8')
