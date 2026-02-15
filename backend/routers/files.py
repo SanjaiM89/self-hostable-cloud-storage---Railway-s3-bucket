@@ -277,8 +277,10 @@ def get_editor_config(
     else:
         doc_type = 'word'
     
-    # host.docker.internal resolves to the host machine from Docker bridge
-    callback_url = "http://host.docker.internal:8000/files/onlyoffice/callback"
+    # API_BASE_URL should be the public URL of the backend (e.g. https://backend.vercel.app)
+    # Fallback to host.docker.internal for local Docker development
+    api_base_url = os.getenv("API_BASE_URL", "http://host.docker.internal:8000")
+    callback_url = f"{api_base_url}/files/onlyoffice/callback"
     
     onlyoffice_secret = os.getenv("ONLYOFFICE_JWT_SECRET", "supersecretjwtkeysupersecretjwtkey")
     

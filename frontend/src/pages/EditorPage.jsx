@@ -4,7 +4,7 @@ import { filesAPI } from '../utils/api';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import api from '../utils/api';
 
-const ONLYOFFICE_URL = 'http://localhost:8080';
+const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080';
 
 export default function EditorPage() {
     const { fileId } = useParams();
@@ -26,7 +26,7 @@ export default function EditorPage() {
 
                 // Load OnlyOffice API script
                 const script = document.createElement('script');
-                script.src = `${ONLYOFFICE_URL}/web-apps/apps/api/documents/api.js`;
+                script.src = `${import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'}/web-apps/apps/api/documents/api.js`;
                 script.onload = () => {
                     if (window.DocsAPI) {
                         editorInitialized.current = true;

@@ -62,7 +62,7 @@ export default function SharedFilePage() {
             initEditor();
         } else {
             const script = document.createElement('script');
-            script.src = 'http://localhost:8080/web-apps/apps/api/documents/api.js';
+            script.src = `${import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'}/web-apps/apps/api/documents/api.js`;
             script.onload = initEditor;
             script.onerror = () => console.error('Failed to load OnlyOffice API');
             document.head.appendChild(script);
