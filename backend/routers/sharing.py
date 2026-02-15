@@ -285,8 +285,10 @@ def get_shared_editor_config(token: str, db: Session = Depends(get_db)):
     }
 
     # Add callback only if editing is allowed
+    # Add callback only if editing is allowed
     if can_edit:
-        config["editorConfig"]["callbackUrl"] = "http://host.docker.internal:8000/files/onlyoffice/callback"
+        backend_url = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
+        config["editorConfig"]["callbackUrl"] = f"{backend_url}/files/onlyoffice/callback"
 
     token_jwt = pyjwt.encode(config, onlyoffice_secret, algorithm="HS256")
     config["token"] = token_jwt

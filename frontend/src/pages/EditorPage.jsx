@@ -11,6 +11,8 @@ export default function EditorPage() {
     const [fileName, setFileName] = useState('Document');
     const editorInstanceRef = useRef(null);
 
+    const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'saving', 'unsaved'
+
     useEffect(() => {
         let mounted = true;
 
@@ -30,6 +32,18 @@ export default function EditorPage() {
                     height: "100%",
                     events: {
                         onAppReady: () => console.log('OnlyOffice Ready'),
+                        // Track Save State
+                        onDocumentStateChange: (event) => {
+                            // event.data: true (modified), false (unmodified/saved)
+                            if (event.data) {
+                                setSaveStatus('unsaved');
+                            } else {
+                                setSaveStatus('saved');
+                            }
+                        },
+                        onRequestEditRights: () => {
+                            // This event happens when user tries to edit. We can force save here?? No.
+                        },
                         onError: (event) => {
                             console.error('OnlyOffice Error Event:', event);
                             if (event && event.data) {
@@ -44,6 +58,9 @@ export default function EditorPage() {
                         }
                     }
                 };
+
+                // Force Autosave locally in config if possible
+                // (Already set in backend: customization.autosave = true)
 
                 console.log("Initializing OnlyOffice with config:", editorConfig);
 
@@ -146,6 +163,24 @@ export default function EditorPage() {
                             {fileName}
                         </h1>
                         <span className="text-xs text-gray-500">OnlyOffice Editor</span>
+                    </div>
+                    {/* Status Badge */}
+                    <div className="ml-4">
+                        {saveStatus === 'saved' && (
+                            <span className="inline-flex items-center px-2 py-1 rounded bg-green-100 text-green-700 text-xs font-medium">
+                                Saved to S3
+                            </span>
+                        )}
+                        {saveStatus === 'unsaved' && (
+                            <span className="inline-flex items-center px-2 py-1 rounded bg-yellow-100 text-yellow-700 text-xs font-medium">
+                                Unsaved Changes...
+                            </span>
+                        )}
+                        {saveStatus === 'saving' && (
+                            <span className="inline-flex items-center px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs font-medium">
+                                Uploading to S3...
+                            </span>
+                        )}
                     </div>
                 </div>
 

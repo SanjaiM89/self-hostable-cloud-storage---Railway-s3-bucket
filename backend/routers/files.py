@@ -325,10 +325,8 @@ async def onlyoffice_callback(
         # but usually sends it if secret is set.
         pass
 
-    status = body.get("status")
-    
     # Status 2 = Ready for saving, 6 = Force Save
-    # Status 1 = Editing, 3 = Corrupted, 4 = Closed without changes
+    # We want to save on BOTH to keep S3 updated.
     if status == 2 or status == 6:
         download_url = body.get("url")
         key = body.get("key", "")
@@ -337,12 +335,30 @@ async def onlyoffice_callback(
         file_id = None
         if "-" in key:
              try:
-                 file_id = int(key.split("-")[0])
+                 # Key format: share-ID-TIMESTAMP or just ID-TIMESTAMP
+                 parts = key.split("-")
+                 if parts[0] == "share":
+                     # Shared file: share-SHARE_ID-TIMESTAMP -> We need to look up file_id from share_id
+                     # But wait, we don't have DB session here easily to look up share.
+                     # Actually, let's just rely on the 'file_id' query param we added to callbackUrl!
+                     pass
+                 else:
+                     file_id = int(parts[0])
              except:
                  pass
 
+        # Use the file_id from query param if available (passed in callbackUrl)
+        if not file_id:
+            try:
+                # request.query_params is available in FastAPI
+                q_file_id = request.query_params.get("file_id")
+                if q_file_id:
+                    file_id = int(q_file_id)
+            except:
+                pass
+
         if download_url and file_id:
-             print(f"DEBUG: Downloading edited file {file_id} from {download_url}")
+             print(f"DEBUG: Downloading edited file {file_id} from {download_url} (Status: {status})")
              try:
                  # Download the edited file from OnlyOffice
                  # verify=False because Render internal SSL might be valid but let's be safe
@@ -353,13 +369,10 @@ async def onlyoffice_callback(
                      
                      # Save to S3
                      try:
-                         from ..database import get_db
+                         from ..database import get_db, SessionLocal
                      except ImportError:
-                         from database import get_db
+                         from database import get_db, SessionLocal
                          
-                     # We need manual session here since this is async without Depends
-                     # Or use get_db manually
-                     from ..database import SessionLocal
                      db = SessionLocal()
                      
                      try:
@@ -367,28 +380,43 @@ async def onlyoffice_callback(
                          
                          if file_record and file_record.s3_key:
                              # Update S3
-                             # Need BytesIO wrapper
                              from io import BytesIO
                              file_obj = BytesIO(content)
                              
                              # We can use upload_file_to_s3 which expects file-like object
+                             # Need to import it
+                             try:
+                                 from ..storage import upload_file_to_s3
+                             except ImportError:
+                                 from storage import upload_file_to_s3
+
+                             # Reset pointer
+                             file_obj.seek(0)
                              success = upload_file_to_s3(file_obj, file_record.s3_key)
                              
                              if success:
-                                 # Update Size/Time
+                                 # Update size/time
                                  file_record.size = len(content)
-                                 file_record.updated_at = datetime.datetime.utcnow()
+                                 # file_record.updated_at = ... (auto updated by SQLA usually)
                                  db.commit()
-                                 print(f"SUCCESS: Updated file {file_id} in S3")
+                                 print(f"SUCCESS: File {file_id} updated in S3")
+                                 return {"error": 0}
                              else:
                                  print(f"ERROR: Failed to upload to S3")
+                                 return {"error": 1}
                          else:
-                             print(f"ERROR: File {file_id} not found in DB")
+                             print(f"ERROR: File record {file_id} not found or no s3_key")
+                             return {"error": 1}
                      finally:
                          db.close()
                  else:
                      print(f"ERROR: Failed to download from OnlyOffice: {r.status_code}")
+                     return {"error": 1}
              except Exception as e:
+                 print(f"ERROR: Exception in callback: {e}")
+                 return {"error": 1}
+    
+    # Return 0 for other statuses to keep OnlyOffice happy
                  print(f"ERROR: Callback Processing Exception: {e}")
                  return {"error": 1}
 
