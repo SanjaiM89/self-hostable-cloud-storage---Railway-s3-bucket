@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Body, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -237,180 +237,161 @@ def rename_file(
 
 @router.get("/editor-config/{file_id}")
 def get_editor_config(file_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    """Generate configuration for DocSpace Editor SDK"""
+    """Generate configuration for Self-Hosted OnlyOffice Document Server (JWT)"""
+    # Fix import inside function
     try:
-        from ..services.docspace import docspace_client, DOCSPACE_URL
+        from ..services.onlyoffice import OnlyOfficeService
     except ImportError:
-        from services.docspace import docspace_client, DOCSPACE_URL
-    import requests
+        from services.onlyoffice import OnlyOfficeService
     import os
     
     try:
-        print(f"DEBUG: Generating editor config for file {file_id}")
+        # 1. Fetch File
         file = db.query(FileModel).filter(FileModel.id == file_id).first()
         if not file:
-            print(f"DEBUG: File {file_id} not found")
             raise HTTPException(status_code=404, detail="File not found")
-
-        # Check permissions
+        
+        # 2. Check Permissions
         if file.user_id != current_user.id:
-            # Check for sharing (simplify for now: owner only or shared)
-            # For now owner only
-            # raise HTTPException(status_code=403, detail="Not authorized")
+            # TODO: Add shared file logic here
             pass
 
-        key = f"{file.id}-{file.updated_at.timestamp()}"
-        file_ext = file.name.split('.')[-1]
-        document_type = "word" # default
-        if file_ext in ['xlsx', 'csv']:
-            document_type = "cell"
-        elif file_ext in ['pptx', 'ppt']:
-            document_type = "slide"
-
-        docspace_mode = True # Force DocSpace for now
+        # 3. Generate Download URL (Presigned S3) - 1 hour expiry
+        download_url = generate_presigned_url(file.s3_key, expiration=3600)
+        if not download_url:
+            raise HTTPException(status_code=500, detail="Could not generate download URL")
+            
+        # 4. Callback URL (Where OnlyOffice sends changes)
+        # Using BACKEND_URL env var or defaulting to localhost/vercel
+        # BACKEND_URL should be the public URL of the backend service (e.g. Vercel)
+        backend_url = os.getenv("BACKEND_URL", "https://your-backend.vercel.app").strip().rstrip("/")
+        # We use the EXISTING endpoint defined below: /files/onlyoffice/callback (since router prefix is /files)
+        # Pass file_id in query just in case, but OnlyOffice mainly uses body 'key' and 'url'.
+        # But we encode file_id in the 'key' too.
+        # We can also pass ?token=... for strict auth, but we use JWT body validation mostly.
+        callback_url = f"{backend_url}/files/onlyoffice/callback?file_id={file.id}&user_id={current_user.id}" 
         
-        if docspace_mode:
-            print(f"DEBUG: Using DocSpace mode for file {file_id}, docspace_id={file.docspace_id}")
-            
-            # Verify DocSpace Connection first
-            if not docspace_client.check_connection():
-                 print("DEBUG: DocSpace Connection Check Failed")
-                 raise HTTPException(status_code=502, detail="Failed to connect to DocSpace API. Check URL and API Key.")
-            else:
-                 print("DEBUG: DocSpace Connection OK")
-
-            # Ensure file is in DocSpace
-            if not file.docspace_id:
-                print(f"DEBUG: Uploading file {file_id} to DocSpace...")
-                # Download from S3 first
-                try:
-                    s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
-                    content = s3_response['Body'].read()
-                    print(f"DEBUG: Downloaded from S3, size={len(content)}")
-                except Exception as e:
-                    print(f"DEBUG: S3 Download Error: {e}")
-                    raise HTTPException(status_code=500, detail=f"S3 Error: {str(e)}")
-
-                try:
-                    # Upload to DocSpace
-                    docspace_file = docspace_client.upload_file(content, file.name)
-                    print(f"DEBUG: DocSpace upload successful: {docspace_file}")
-                    
-                    # Parse response to get ID
-                    # Response format: { "response": { "id": 123, ... } } or similar?
-                    # Need to verify structure. Based on API docs, response is often { "response": { ... } }
-                    # If my client returns response.json() directly.
-                    
-                    if 'response' in docspace_file:
-                        file.docspace_id = str(docspace_file['response']['id'])
-                    elif 'id' in docspace_file:
-                         file.docspace_id = str(docspace_file['id'])
-                    else:
-                        print(f"DEBUG: Unexpected DocSpace response format: {docspace_file}")
-                        # Fallback or error?
-                        # raise Exception("Invalid DocSpace response")
-                        # Try to find ID recursively?
-                        pass
-                        
-                    db.commit()
-                    print(f"DEBUG: Updated DB with docspace_id={file.docspace_id}")
-                except Exception as e:
-                    print(f"DEBUG: DocSpace Upload Failed: {e}")
-                    raise HTTPException(status_code=502, detail=f"DocSpace Upload Failed: {str(e)}")
-
-            # Check if docspace_id is set now
-            if not file.docspace_id:
-                 raise HTTPException(status_code=500, detail="Failed to obtain DocSpace ID")
-
-            # Generate DocSpace Editor Config
-            # We need the 'viewUrl' or similar from DocSpace to embed?
-            # Or assume we use standard editor config pointing to DocSpace Document Server?
-            # DocSpace provides a specific "Room" or "File" view.
-            
-            # For "Embedded Editor", we usually need document.url.
-            # In DocSpace, we might use the "Open in Editor" API to get the config?
-            
-            # For now, let's try to get file info to verify it exists
-            print(f"DEBUG: Getting info for docspace_id={file.docspace_id}")
-            ds_info = docspace_client.get_file_info(file.docspace_id)
-            print(f"DEBUG: DocSpace Info: {ds_info}")
-            
-            if not ds_info:
-                 raise HTTPException(status_code=404, detail="File not found in DocSpace")
-            
-            # Construct standard config, but with URL pointing to DocSpace content?
-            # Actually, standard OnlyOffice Editor (React) connects to a Document Server.
-            # DocSpace HAS a Document Server.
-            # We need the document URL that the Document Server can download.
-            
-            # If DocSpace 2.0 API:
-            # Maybe ds_info['response']['viewUrl']?
-            
-            # Let's inspect ds_info structure in logs.
-            
-            return {
-                "document": {
-                    "fileType": file_ext,
-                    "key": key,
-                    "title": file.name,
-                    "url": "https://example.com/placeholder" # We need the real URL
-                },
-                "documentType": document_type,
-                "editorConfig": {
-                    "mode": "edit",
-                    "callbackUrl": f"{os.getenv('API_BASE_URL')}/webhooks/docspace/webhook"
-                },
-                 # Pass the raw info for debugging frontend
-                "docspaceInfo": ds_info
-            }
+        # 5. Generate Config & Token
+        config = OnlyOfficeService.get_editor_config(file, current_user, download_url, callback_url)
+        
+        # Add OnlyOffice URL for Frontend script loading
+        config["onlyoffice_url"] = os.getenv("ONLYOFFICE_URL", "https://your-render-app.onrender.com")
+        
+        return config
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(f"DEBUG: Unhandled Error in get_editor_config: {e}")
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+        print(f"Error generating editor config: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/onlyoffice/callback")
-async def onlyoffice_callback(body: dict = Body(...)):
-    """Handle OnlyOffice save callbacks"""
+async def onlyoffice_callback(
+    request: Request, 
+    body: dict = Body(...)
+):
+    """
+    Handle OnlyOffice save callbacks.
+    Validates JWT and updates S3.
+    """
+    try:
+        from ..services.onlyoffice import OnlyOfficeService
+    except ImportError:
+        from services.onlyoffice import OnlyOfficeService
+        
     import requests as req
     from io import BytesIO
     
+    # 1. Validate JWT
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header:
+        # Expected: "Bearer <token>"
+        parts = auth_header.split()
+        if len(parts) == 2:
+            token = parts[1]
+        else:
+            token = auth_header # Fallback
+    elif "token" in body:
+        token = body["token"]
+    
+    if token:
+        payload = OnlyOfficeService.decode_jwt(token)
+        if not payload:
+             print("DEBUG: Callback JWT Invalid")
+             raise HTTPException(status_code=403, detail="Invalid JWT")
+        # JWT Valid
+    else:
+        # If no token, check configuration. OnlyOffice Force Save sometimes omits token in header 
+        # but usually sends it if secret is set.
+        pass
+
     status = body.get("status")
     
-    # Status 2 = document is ready for saving
-    # Status 6 = document is saved (force save)
-    if status in [2, 6]:
+    # Status 2 = Ready for saving, 6 = Force Save
+    # Status 1 = Editing, 3 = Corrupted, 4 = Closed without changes
+    if status == 2 or status == 6:
         download_url = body.get("url")
-        key = body.get("key")
-        if download_url and key:
-            try:
-                # Extract file_id from the key (format: "file_id-timestamp")
-                file_id = int(key.split("-")[0])
-                
-                # Download the edited file from OnlyOffice
-                response = req.get(download_url)
-                if response.status_code == 200:
-                    from ..database import SessionLocal
-                    from ..models import File as FileModel
-                    
-                    db = SessionLocal()
-                    try:
-                        file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
-                        if file_record and file_record.s3_key:
-                            # Re-upload to S3
-                            file_obj = BytesIO(response.content)
-                            upload_file_to_s3(file_obj, file_record.s3_key)
-                            file_record.size = len(response.content)
-                            file_record.updated_at = datetime.datetime.utcnow()
-                            db.commit()
-                    finally:
-                        db.close()
-            except Exception as e:
-                print(f"OnlyOffice callback error: {e}")
-    
-    # Must always return {"error": 0} to acknowledge
+        key = body.get("key", "")
+        
+        # Extract file_id from key
+        file_id = None
+        if "-" in key:
+             try:
+                 file_id = int(key.split("-")[0])
+             except:
+                 pass
+
+        if download_url and file_id:
+             print(f"DEBUG: Downloading edited file {file_id} from {download_url}")
+             try:
+                 # Download the edited file from OnlyOffice
+                 # verify=False because Render internal SSL might be valid but let's be safe
+                 r = req.get(download_url, verify=False, timeout=60)
+                 
+                 if r.status_code == 200:
+                     content = r.content
+                     
+                     # Save to S3
+                     try:
+                         from ..database import get_db
+                     except ImportError:
+                         from database import get_db
+                         
+                     # We need manual session here since this is async without Depends
+                     # Or use get_db manually
+                     from ..database import SessionLocal
+                     db = SessionLocal()
+                     
+                     try:
+                         file_record = db.query(FileModel).filter(FileModel.id == file_id).first()
+                         
+                         if file_record and file_record.s3_key:
+                             # Update S3
+                             # Need BytesIO wrapper
+                             from io import BytesIO
+                             file_obj = BytesIO(content)
+                             
+                             # We can use upload_file_to_s3 which expects file-like object
+                             success = upload_file_to_s3(file_obj, file_record.s3_key)
+                             
+                             if success:
+                                 # Update Size/Time
+                                 file_record.size = len(content)
+                                 file_record.updated_at = datetime.datetime.utcnow()
+                                 db.commit()
+                                 print(f"SUCCESS: Updated file {file_id} in S3")
+                             else:
+                                 print(f"ERROR: Failed to upload to S3")
+                         else:
+                             print(f"ERROR: File {file_id} not found in DB")
+                     finally:
+                         db.close()
+                 else:
+                     print(f"ERROR: Failed to download from OnlyOffice: {r.status_code}")
+             except Exception as e:
+                 print(f"ERROR: Callback Processing Exception: {e}")
+                 return {"error": 1}
+
     return {"error": 0}
 
 
@@ -622,6 +603,7 @@ def extract_zip(
                     )
                     db.add(new_file)
                     extracted.append(entry_name)
+                    
         db.commit()
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid ZIP file")

@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { filesAPI } from '../utils/api'; // Ensure this is correct import
-import api from '../utils/api'; // Fallback
+import api from '../utils/api'; // Ensure axios instance is used
 import { ArrowLeft, Loader2 } from 'lucide-react';
 
 export default function EditorPage() {
@@ -15,68 +14,74 @@ export default function EditorPage() {
     useEffect(() => {
         let mounted = true;
 
-        const initDocSpaceEditor = (config) => {
+        const initOnlyOfficeEditor = (config) => {
             if (!mounted) return;
             try {
-                // DocSpace SDK initialization
-                // We assume window.DocSpace.SDK is available
-                if (!window.DocSpace || !window.DocSpace.SDK) {
-                    throw new Error("DocSpace SDK not found");
+                if (!window.DocsAPI) {
+                    throw new Error("OnlyOffice DocsAPI not found. Script load failed?");
                 }
 
-                const frame = window.DocSpace.SDK.initEditor({
-                    url: config.docspace_url,
-                    id: config.file_id,
-                    mode: config.mode || 'edit',
+                const editorConfig = {
+                    document: config.document,
+                    documentType: config.documentType,
+                    editorConfig: config.editorConfig,
+                    token: config.token,
                     width: "100%",
                     height: "100%",
                     events: {
-                        onAppReady: () => console.log('DocSpace Ready'),
-                        onError: (err) => console.error('DocSpace Error:', err),
+                        onAppReady: () => console.log('OnlyOffice Ready'),
+                        onError: (err) => console.error('OnlyOffice Error:', err),
+                        // Validation error?
+                        onRequestClose: () => {
+                            console.log("Closing Editor");
+                            navigate("/");
+                        }
                     }
-                });
+                };
 
-                const container = document.getElementById('onlyoffice-editor');
-                if (container) {
-                    container.innerHTML = ''; // Clear previous
-                    // If frame is node, append. If it's just created in place, good.
-                    // SDK usually returns the iframe or key.
-                    // We'll try appending if it returns a node.
-                    if (frame instanceof Node) {
-                        container.appendChild(frame);
-                    }
-                }
-                editorInstanceRef.current = frame;
+                console.log("Initializing OnlyOffice with config:", editorConfig);
+
+                // DocsAPI.DocEditor takes ID of the container
+                const docEditor = new window.DocsAPI.DocEditor("onlyoffice-editor", editorConfig);
+                editorInstanceRef.current = docEditor;
                 setLoading(false);
 
             } catch (err) {
-                console.error("Failed to init DocSpace editor:", err);
-                if (mounted) setError('Failed to initialize DocSpace editor');
+                console.error("Failed to init OnlyOffice editor:", err);
+                if (mounted) setError('Failed to initialize OnlyOffice editor: ' + err.message);
                 setLoading(false);
             }
         };
 
         const fetchConfig = async () => {
             try {
+                setLoading(true);
                 // Fetch config from backend
-                // Use filesAPI if available, or api directly
                 const res = await api.get(`/files/editor-config/${fileId}`);
-                const config = res.data; // { docspace_url, file_id, mode, file_name }
+                const config = res.data;
+                // config contains: document, documentType, editorConfig, token, onlyoffice_url
 
-                if (mounted) setFileName(config.file_name || 'Document');
+                if (mounted) setFileName(config.document?.title || 'Document');
 
-                // Load SDK if needed
-                if (window.DocSpace) {
-                    initDocSpaceEditor(config);
+                const onlyofficeUrl = config.onlyoffice_url;
+                if (!onlyofficeUrl) {
+                    throw new Error("Backend did not return OnlyOffice URL");
+                }
+
+                // Check if script already loaded
+                if (window.DocsAPI) {
+                    initOnlyOfficeEditor(config);
                 } else {
                     const script = document.createElement('script');
-                    // SDK URL
-                    script.src = `${config.docspace_url}/static/scripts/sdk/1.0.0/api.js`;
+                    // Standard URL: /web-apps/apps/api/documents/api.js
+                    // Remove trailing slash just in case
+                    const baseUrl = onlyofficeUrl.replace(/\/$/, "");
+                    script.src = `${baseUrl}/web-apps/apps/api/documents/api.js`;
                     script.async = true;
-                    script.onload = () => initDocSpaceEditor(config);
+                    script.onload = () => initOnlyOfficeEditor(config);
                     script.onerror = () => {
                         if (mounted) {
-                            setError('Failed to load DocSpace API script');
+                            setError(`Failed to load OnlyOffice API from ${script.src}`);
                             setLoading(false);
                         }
                     };
@@ -86,55 +91,90 @@ export default function EditorPage() {
             } catch (err) {
                 console.error('Failed to load editor config:', err);
                 if (mounted) {
-                    setError(err.response?.data?.detail || 'Failed to load editor configuration');
+                    setError(err.response?.data?.detail || err.message || 'Failed to load editor configuration');
                     setLoading(false);
                 }
             }
         };
 
-        fetchConfig();
-
+        // Cleanup function
         return () => {
             mounted = false;
-            // Cleanup? DocSpace SDK doesn't seem to have destroy?
-            // We just clear the container.
-            const container = document.getElementById('onlyoffice-editor');
-            if (container) container.innerHTML = '';
-        };
-    }, [fileId]);
+            if (editorInstanceRef.current) {
+                // DocsAPI doesn't have a clear destroy method officially documented for React unmount
+                // usually we just clear the container.
+                // But if there is a destroy method on instance:
+                if (editorInstanceRef.current.destroyEditor) {
+                    editorInstanceRef.current.destroyEditor();
+                }
+                editorInstanceRef.current = null;
+            }
 
-    if (error) {
-        return (
-            <div className="flex flex-col items-center justify-center h-screen bg-[var(--bg-primary)] gap-4">
-                <p className="text-red-500 text-center max-w-md">{error}</p>
-                <button
-                    onClick={() => navigate('/')}
-                    className="flex items-center gap-2 text-green-500 hover:text-green-600 transition-colors"
-                >
-                    <ArrowLeft className="w-4 h-4" /> Back to files
-                </button>
-            </div>
-        );
-    }
+            // Also clear the container manually if needed
+            const container = document.getElementById('onlyoffice-editor');
+            if (container) container.innerHTML = "";
+
+            // Remove script? No, keep it cached.
+        };
+
+        fetchConfig();
+    }, [fileId, navigate]);
 
     return (
-        <div className="h-screen flex flex-col bg-[var(--bg-primary)]">
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--border-color)] bg-[var(--bg-sidebar)]">
-                <button
-                    onClick={() => navigate('/')}
-                    className="p-2 rounded-lg hover:bg-[var(--card-hover)] text-[var(--text-secondary)] transition-colors"
-                >
-                    <ArrowLeft className="w-5 h-5" />
-                </button>
-                <span className="text-sm font-medium text-[var(--text-primary)]">{fileName}</span>
+        <div className="h-screen flex flex-col bg-gray-50">
+            {/* Header */}
+            <header className="h-14 bg-white border-b border-gray-200 flex items-center px-4 justify-between flex-shrink-0 z-10">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate('/')}
+                        className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                        title="Back to Files"
+                    >
+                        <ArrowLeft size={20} className="text-gray-600" />
+                    </button>
+                    <div className="flex flex-col">
+                        <h1 className="text-base font-semibold text-gray-900 truncate max-w-[300px]">
+                            {fileName}
+                        </h1>
+                        <span className="text-xs text-gray-500">OnlyOffice Editor</span>
+                    </div>
+                </div>
+
+                {/* Actions could go here */}
+            </header>
+
+            {/* Editor Container */}
+            <div className="flex-1 relative overflow-hidden bg-gray-100">
                 {loading && (
-                    <Loader2 className="w-4 h-4 text-green-500 animate-spin ml-2" />
+                    <div className="absolute inset-0 flex items-center justify-center bg-white z-20">
+                        <div className="flex flex-col items-center gap-3">
+                            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                            <p className="text-sm text-gray-500">Loading Editor...</p>
+                            <p className="text-xs text-gray-400">If this takes long, the OnlyOffice server might be waking up (Render)</p>
+                        </div>
+                    </div>
                 )}
+
+                {error && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white z-20">
+                        <div className="max-w-md p-6 bg-red-50 rounded-lg text-center">
+                            <p className="text-red-600 font-medium mb-2">Error Loading Editor</p>
+                            <p className="text-sm text-gray-600">{error}</p>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="mt-4 px-4 py-2 bg-white border border-gray-300 rounded text-sm hover:bg-gray-50"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* The ID must match what we pass to DocsAPI */}
+                <div id="onlyoffice-editor" className="w-full h-full"></div>
             </div>
-            <div className="flex-1 overflow-hidden relative">
-                {/* OnlyOffice Container */}
-                <div id="onlyoffice-editor" className="w-full h-full" />
-            </div>
+
+            {/* OnlyOffice script injection happens in useEffect */}
         </div>
     );
 }
