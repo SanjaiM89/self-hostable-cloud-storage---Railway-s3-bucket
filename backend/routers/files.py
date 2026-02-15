@@ -271,6 +271,14 @@ def get_editor_config(file_id: int, db: Session = Depends(get_db), current_user:
         
         if docspace_mode:
             print(f"DEBUG: Using DocSpace mode for file {file_id}, docspace_id={file.docspace_id}")
+            
+            # Verify DocSpace Connection first
+            if not docspace_client.check_connection():
+                 print("DEBUG: DocSpace Connection Check Failed")
+                 raise HTTPException(status_code=502, detail="Failed to connect to DocSpace API. Check URL and API Key.")
+            else:
+                 print("DEBUG: DocSpace Connection OK")
+
             # Ensure file is in DocSpace
             if not file.docspace_id:
                 print(f"DEBUG: Uploading file {file_id} to DocSpace...")

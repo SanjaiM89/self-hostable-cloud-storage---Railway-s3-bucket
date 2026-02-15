@@ -16,11 +16,20 @@ class DocSpaceClient:
     def __init__(self):
         self.base_url = DOCSPACE_URL.rstrip("/")
         self.headers = {
-            "Authorization": f"{DOCSPACE_API_KEY}", 
+            "Authorization": f"Bearer {DOCSPACE_API_KEY}" if not DOCSPACE_API_KEY.startswith("Bearer ") else DOCSPACE_API_KEY, 
             "Accept": "application/json"
         }
-        if not DOCSPACE_API_KEY.startswith("Bearer "):
-             self.headers["Authorization"] = f"{DOCSPACE_API_KEY}"
+        
+    def check_connection(self):
+        """Checks if we can connect to DocSpace"""
+        try:
+            url = f"{self.base_url}/api/2.0/people/@self"
+            response = requests.get(url, headers=self.headers)
+            print(f"DocSpace Check Connection: {response.status_code} - {response.text[:100]}")
+            return response.status_code == 200
+        except Exception as e:
+            print(f"DocSpace Check Connection Failed: {e}")
+            return False
 
     def create_room(self, title="Cloud Storage Imports"):
         """Creates a room to store imported files"""
