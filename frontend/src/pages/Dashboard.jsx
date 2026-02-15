@@ -22,6 +22,7 @@ export default function Dashboard() {
     // Inline editor state
     const [editingFile, setEditingFile] = useState(null);
     const [editorConfig, setEditorConfig] = useState(null);
+    const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'unsaved'
     const editorContainerRef = useRef(null);
     const editorInstanceRef = useRef(null);
 
@@ -178,11 +179,21 @@ export default function Dashboard() {
         }
     };
 
-    const closeEditor = () => {
+    const closeEditor = async () => {
+        // Force save before closing to ensure S3 is updated
         if (editorInstanceRef.current) {
+            try {
+                // Trigger OnlyOffice force save via command API
+                editorInstanceRef.current.triggerForceSave && editorInstanceRef.current.triggerForceSave();
+            } catch (e) {
+                console.log('Force save attempt:', e);
+            }
+            // Wait briefly for the save callback to fire
+            await new Promise(resolve => setTimeout(resolve, 1500));
             try { editorInstanceRef.current.destroyEditor(); } catch (e) { }
             editorInstanceRef.current = null;
         }
+        setSaveStatus('saved');
         setEditingFile(null);
         setEditorConfig(null);
         // Remove the editor breadcrumb
@@ -210,7 +221,20 @@ export default function Dashboard() {
             if (editorInstanceRef.current) {
                 try { editorInstanceRef.current.destroyEditor(); } catch (e) { }
             }
-            editorInstanceRef.current = new window.DocsAPI.DocEditor('onlyoffice-editor', editorConfig);
+            // Inject save status tracking event into config
+            const configWithEvents = {
+                ...editorConfig,
+                events: {
+                    ...editorConfig.events,
+                    onDocumentStateChange: (event) => {
+                        // event.data: true = modified, false = saved
+                        setSaveStatus(event.data ? 'unsaved' : 'saved');
+                    },
+                    onAppReady: () => console.log('OnlyOffice Ready'),
+                    onError: (event) => console.error('OnlyOffice Error:', event),
+                },
+            };
+            editorInstanceRef.current = new window.DocsAPI.DocEditor('onlyoffice-editor', configWithEvents);
         };
 
         if (window.DocsAPI) {
@@ -295,6 +319,52 @@ export default function Dashboard() {
                             className="h-full w-full"
                             style={{ display: editingFile ? 'block' : 'none' }}
                         />
+
+                        {/* Floating Save Status Badge */}
+                        {editingFile && (
+                            <div style={{
+                                position: 'fixed',
+                                bottom: '20px',
+                                right: '20px',
+                                zIndex: 999999,
+                                pointerEvents: 'none',
+                                transition: 'opacity 0.3s ease',
+                            }}>
+                                {saveStatus === 'saved' ? (
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '10px 18px',
+                                        borderRadius: '10px',
+                                        backgroundColor: 'rgba(6, 95, 70, 0.95)',
+                                        color: '#d1fae5',
+                                        fontSize: '13px',
+                                        fontWeight: '600',
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+                                        backdropFilter: 'blur(10px)',
+                                    }}>
+                                        <span style={{ fontSize: '16px' }}>✓</span> Saved to S3
+                                    </div>
+                                ) : (
+                                    <div style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '8px',
+                                        padding: '10px 18px',
+                                        borderRadius: '10px',
+                                        backgroundColor: 'rgba(146, 64, 14, 0.95)',
+                                        color: '#fef3c7',
+                                        fontSize: '13px',
+                                        fontWeight: '600',
+                                        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
+                                        backdropFilter: 'blur(10px)',
+                                    }}>
+                                        <span style={{ fontSize: '16px' }}>●</span> Unsaved Changes
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* File Grid — hidden when editor is open */}
                         <div className="px-5 py-4" style={{ display: editingFile ? 'none' : 'block' }}>
