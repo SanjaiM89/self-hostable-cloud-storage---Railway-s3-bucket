@@ -4,6 +4,7 @@ import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import FileGrid from '../components/FileGrid';
 import ActivityBar from '../components/ActivityBar';
+import MarkdownEditor from '../components/MarkdownEditor';
 import { filesAPI } from '../utils/api';
 
 let activityIdCounter = 0;
@@ -25,6 +26,9 @@ export default function Dashboard() {
     const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'unsaved'
     const editorContainerRef = useRef(null);
     const editorInstanceRef = useRef(null);
+
+    // Markdown editor state
+    const [markdownFile, setMarkdownFile] = useState(null);
 
     // ─── File fetching ───
     const fetchFiles = useCallback(async () => {
@@ -263,6 +267,12 @@ export default function Dashboard() {
             handleNavigate(file.id, file.name);
             return;
         }
+        // Route .md files to Markdown editor
+        if (/\.md$/i.test(file.name)) {
+            setMarkdownFile(file);
+            setBreadcrumbs((prev) => [...prev, { id: `md-${file.id}`, name: file.name }]);
+            return;
+        }
         const editableExts = /\.(docx?|xlsx?|pptx?|pdf|odt|ods|odp|csv|txt|rtf)$/i;
         if (editableExts.test(file.name)) {
             openEditor(file);
@@ -297,6 +307,10 @@ export default function Dashboard() {
                     onBreadcrumbClick={(id) => {
                         if (String(id).startsWith('editor-')) return;
                         if (editingFile) closeEditor();
+                        if (markdownFile) {
+                            setMarkdownFile(null);
+                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
+                        }
                         handleNavigate(id, breadcrumbs.find((b) => b.id === id)?.name);
                     }}
                     searchQuery={searchQuery}
@@ -305,8 +319,16 @@ export default function Dashboard() {
                     onViewModeChange={setViewMode}
                     onUpload={handleUpload}
                     onToggleActivity={() => setActivityOpen((p) => !p)}
-                    showBackButton={!!editingFile}
-                    onBack={closeEditor}
+                    showBackButton={!!editingFile || !!markdownFile}
+                    onBack={() => {
+                        if (markdownFile) {
+                            setMarkdownFile(null);
+                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
+                            fetchFiles();
+                        } else {
+                            closeEditor();
+                        }
+                    }}
                 />
 
                 <div className="flex flex-1 overflow-hidden">
@@ -319,6 +341,20 @@ export default function Dashboard() {
                             className="h-full w-full"
                             style={{ display: editingFile ? 'block' : 'none' }}
                         />
+
+                        {/* Markdown Editor — shown when a .md file is open */}
+                        {markdownFile && (
+                            <div className="h-full w-full">
+                                <MarkdownEditor
+                                    file={markdownFile}
+                                    onClose={() => {
+                                        setMarkdownFile(null);
+                                        setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
+                                        fetchFiles();
+                                    }}
+                                />
+                            </div>
+                        )}
 
                         {/* Floating Save Status Badge */}
                         {editingFile && (
@@ -368,7 +404,7 @@ export default function Dashboard() {
                         )}
 
                         {/* File Grid — hidden when editor is open */}
-                        <div className="px-5 py-4" style={{ display: editingFile ? 'none' : 'block' }}>
+                        <div className="px-5 py-4" style={{ display: (editingFile || markdownFile) ? 'none' : 'block' }}>
                             {loading ? (
                                 <div className="flex items-center justify-center py-20">
                                     <div className="w-6 h-6 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin" />

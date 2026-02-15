@@ -87,6 +87,8 @@ export const filesAPI = {
         api.post('/files/create-document', { name, doc_type: docType, parent_id: parentId }),
     extractZip: (fileId) => api.post(`/files/extract/${fileId}`),
     storage: () => api.get('/files/storage'),
+    getContent: (fileId) => api.get(`/files/content/${fileId}`),
+    saveContent: (fileId, content) => api.put(`/files/content/${fileId}`, { content }),
 };
 
 export const sharesAPI = {

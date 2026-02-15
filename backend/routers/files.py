@@ -189,6 +189,67 @@ def register_uploaded_file(
     }
 
 
+# ─── Raw file content (for Markdown editor) ───
+
+from fastapi.responses import PlainTextResponse
+import io
+
+@router.get("/content/{file_id}")
+def get_file_content(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get raw text content of a file from S3 (for Markdown editor)."""
+    file = db.query(FileModel).filter(
+        FileModel.id == file_id,
+        FileModel.user_id == current_user.id,
+    ).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
+        content = obj['Body'].read().decode('utf-8')
+        return {"content": content, "name": file.name, "id": file.id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+class ContentSave(BaseModel):
+    content: str
+
+@router.put("/content/{file_id}")
+def save_file_content(
+    file_id: int,
+    data: ContentSave,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Save raw text content to S3 (for Markdown editor)."""
+    file = db.query(FileModel).filter(
+        FileModel.id == file_id,
+        FileModel.user_id == current_user.id,
+    ).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        content_bytes = data.content.encode('utf-8')
+        s3_client.put_object(
+            Bucket=BUCKET_NAME,
+            Key=file.s3_key,
+            Body=content_bytes,
+            ContentType='text/markdown',
+        )
+        # Update file size
+        file.size = len(content_bytes)
+        db.commit()
+        return {"status": "saved", "size": len(content_bytes)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+
+
 @router.post("/folder")
 def create_folder(
     folder: FolderCreate,
