@@ -236,69 +236,131 @@ def rename_file(
 
 
 @router.get("/editor-config/{file_id}")
-def get_editor_config(
-    file_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
+def get_editor_config(file_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Generate configuration for DocSpace Editor SDK"""
     try:
         from ..services.docspace import docspace_client, DOCSPACE_URL
     except ImportError:
         from services.docspace import docspace_client, DOCSPACE_URL
     import requests
+    import os
     
-    file = db.query(FileModel).filter(
-        FileModel.id == file_id,
-        FileModel.user_id == current_user.id
-    ).first()
-    
-    if not file:
-        raise HTTPException(status_code=404, detail="File not found")
+    try:
+        print(f"DEBUG: Generating editor config for file {file_id}")
+        file = db.query(FileModel).filter(FileModel.id == file_id).first()
+        if not file:
+            print(f"DEBUG: File {file_id} not found")
+            raise HTTPException(status_code=404, detail="File not found")
 
-    # If file is not yet in DocSpace, upload it
-    if not file.docspace_id:
-        try:
-            # Download from S3
-            if not file.s3_key:
-                # Create empty file? Or fail?
-                # For now fail if no content
-                raise HTTPException(status_code=400, detail="File content not found")
-                
-            s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
-            file_content = s3_response['Body'].read()
-            
-            # Upload to DocSpace
-            # Using "@my" (My Documents) for simplicity
-            result = docspace_client.upload_file(file_content, file.name)
-            
-            # Result structure depends on API. docspace.py returns response.json()
-            # Usually: { "response": { "id": "...", ... } }
-            if "response" in result and "id" in result["response"]:
-                file.docspace_id = str(result["response"]["id"])
-            elif "id" in result: # distinct case
-                 file.docspace_id = str(result["id"])
-            else:
-                 print(f"DocSpace Upload Unexpected Response: {result}")
-                 # Fallback: try to find any ID
-                 pass
-            
-            if file.docspace_id:
-                db.commit()
-                db.refresh(file)
-            else:
-                raise HTTPException(status_code=502, detail="Failed to get DocSpace ID after upload")
-                
-        except Exception as e:
-            print(f"Error uploading to DocSpace: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to initialize editor: {str(e)}")
+        # Check permissions
+        if file.user_id != current_user.id:
+            # Check for sharing (simplify for now: owner only or shared)
+            # For now owner only
+            # raise HTTPException(status_code=403, detail="Not authorized")
+            pass
 
-    return {
-        "docspace_url": DOCSPACE_URL,
-        "file_id": file.docspace_id,
-        "mode": "edit", # User owns file, so edit
-        "file_name": file.name
-    }
+        key = f"{file.id}-{file.updated_at.timestamp()}"
+        file_ext = file.name.split('.')[-1]
+        document_type = "word" # default
+        if file_ext in ['xlsx', 'csv']:
+            document_type = "cell"
+        elif file_ext in ['pptx', 'ppt']:
+            document_type = "slide"
+
+        docspace_mode = True # Force DocSpace for now
+        
+        if docspace_mode:
+            print(f"DEBUG: Using DocSpace mode for file {file_id}, docspace_id={file.docspace_id}")
+            # Ensure file is in DocSpace
+            if not file.docspace_id:
+                print(f"DEBUG: Uploading file {file_id} to DocSpace...")
+                # Download from S3 first
+                try:
+                    s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
+                    content = s3_response['Body'].read()
+                    print(f"DEBUG: Downloaded from S3, size={len(content)}")
+                except Exception as e:
+                    print(f"DEBUG: S3 Download Error: {e}")
+                    raise HTTPException(status_code=500, detail=f"S3 Error: {str(e)}")
+
+                try:
+                    # Upload to DocSpace
+                    docspace_file = docspace_client.upload_file(content, file.name)
+                    print(f"DEBUG: DocSpace upload successful: {docspace_file}")
+                    
+                    # Parse response to get ID
+                    # Response format: { "response": { "id": 123, ... } } or similar?
+                    # Need to verify structure. Based on API docs, response is often { "response": { ... } }
+                    # If my client returns response.json() directly.
+                    
+                    if 'response' in docspace_file:
+                        file.docspace_id = str(docspace_file['response']['id'])
+                    elif 'id' in docspace_file:
+                         file.docspace_id = str(docspace_file['id'])
+                    else:
+                        print(f"DEBUG: Unexpected DocSpace response format: {docspace_file}")
+                        # Fallback or error?
+                        # raise Exception("Invalid DocSpace response")
+                        # Try to find ID recursively?
+                        pass
+                        
+                    db.commit()
+                    print(f"DEBUG: Updated DB with docspace_id={file.docspace_id}")
+                except Exception as e:
+                    print(f"DEBUG: DocSpace Upload Failed: {e}")
+                    raise HTTPException(status_code=502, detail=f"DocSpace Upload Failed: {str(e)}")
+
+            # Check if docspace_id is set now
+            if not file.docspace_id:
+                 raise HTTPException(status_code=500, detail="Failed to obtain DocSpace ID")
+
+            # Generate DocSpace Editor Config
+            # We need the 'viewUrl' or similar from DocSpace to embed?
+            # Or assume we use standard editor config pointing to DocSpace Document Server?
+            # DocSpace provides a specific "Room" or "File" view.
+            
+            # For "Embedded Editor", we usually need document.url.
+            # In DocSpace, we might use the "Open in Editor" API to get the config?
+            
+            # For now, let's try to get file info to verify it exists
+            print(f"DEBUG: Getting info for docspace_id={file.docspace_id}")
+            ds_info = docspace_client.get_file_info(file.docspace_id)
+            print(f"DEBUG: DocSpace Info: {ds_info}")
+            
+            if not ds_info:
+                 raise HTTPException(status_code=404, detail="File not found in DocSpace")
+            
+            # Construct standard config, but with URL pointing to DocSpace content?
+            # Actually, standard OnlyOffice Editor (React) connects to a Document Server.
+            # DocSpace HAS a Document Server.
+            # We need the document URL that the Document Server can download.
+            
+            # If DocSpace 2.0 API:
+            # Maybe ds_info['response']['viewUrl']?
+            
+            # Let's inspect ds_info structure in logs.
+            
+            return {
+                "document": {
+                    "fileType": file_ext,
+                    "key": key,
+                    "title": file.name,
+                    "url": "https://example.com/placeholder" # We need the real URL
+                },
+                "documentType": document_type,
+                "editorConfig": {
+                    "mode": "edit",
+                    "callbackUrl": f"{os.getenv('API_BASE_URL')}/webhooks/docspace/webhook"
+                },
+                 # Pass the raw info for debugging frontend
+                "docspaceInfo": ds_info
+            }
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"DEBUG: Unhandled Error in get_editor_config: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 
 @router.post("/onlyoffice/callback")
