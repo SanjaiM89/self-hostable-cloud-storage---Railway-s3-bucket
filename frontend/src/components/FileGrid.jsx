@@ -294,8 +294,8 @@ function FileRow({ file, onOpen, onContextMenu, index }) {
                 <Icon className="w-4 h-4" style={{ color }} strokeWidth={1.5} />
             </div>
             <span className="flex-1 text-[13px] text-[var(--text-primary)] truncate font-medium">{file.name}</span>
-            <span className="text-[12px] text-[var(--text-tertiary)] w-[80px] text-right">{file.is_folder ? '—' : formatSize(file.size)}</span>
-            <span className="text-[12px] text-[var(--text-tertiary)] w-[80px] text-right">{formatDate(file.created_at)}</span>
+            <span className="hidden sm:block text-[12px] text-[var(--text-tertiary)] w-[80px] text-right">{file.is_folder ? '—' : formatSize(file.size)}</span>
+            <span className="hidden md:block text-[12px] text-[var(--text-tertiary)] w-[80px] text-right">{formatDate(file.created_at)}</span>
             <button
                 onClick={(e) => { e.stopPropagation(); onContextMenu(e, file); }}
                 className="p-1 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
