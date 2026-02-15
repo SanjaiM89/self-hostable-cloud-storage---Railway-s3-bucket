@@ -9,10 +9,14 @@ import { filesAPI } from '../utils/api';
 
 let activityIdCounter = 0;
 
+import MediaViewerModal from '../components/MediaViewerModal';
+import { uploadFolder } from '../utils/folderUpload';
+
 export default function Dashboard() {
     const [files, setFiles] = useState([]);
     const [currentFolder, setCurrentFolder] = useState(null);
     const [breadcrumbs, setBreadcrumbs] = useState([{ id: null, name: 'Home' }]);
+    const [mediaFile, setMediaFile] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('grid');
     const [loading, setLoading] = useState(false);
@@ -92,6 +96,21 @@ export default function Dashboard() {
             }
         }
         fetchFiles();
+    };
+
+    // ─── Folder Upload ───
+    const handleFolderUpload = async (fileList) => {
+        const aid = addActivity('upload', `Folder upload...`);
+        try {
+            await uploadFolder(fileList, currentFolder, (current, total, status) => {
+                updateActivity(aid, { percent: Math.round((current / total) * 100), name: status });
+            });
+            updateActivity(aid, { status: 'done', percent: 100, name: 'Folder upload complete' });
+            fetchFiles();
+        } catch (err) {
+            console.error('Folder upload failed:', err);
+            updateActivity(aid, { status: 'error', name: 'Folder upload failed' });
+        }
     };
 
     // ─── Download ───
@@ -272,18 +291,36 @@ export default function Dashboard() {
             handleNavigate(file.id, file.name);
             return;
         }
-        // Route .md files to Markdown editor
-        if (/\.md$/i.test(file.name)) {
+        const ext = file.name.split('.').pop().toLowerCase();
+
+        // Markdown
+        if (file.name.endsWith('.md')) {
             setMarkdownFile(file);
             setBreadcrumbs((prev) => [...prev, { id: `md-${file.id}`, name: file.name }]);
             return;
         }
-        const editableExts = /\.(docx?|xlsx?|pptx?|pdf|odt|ods|odp|csv|txt|rtf)$/i;
-        if (editableExts.test(file.name)) {
-            openEditor(file);
-        } else {
-            handleDownload(file);
+
+        // Media (Video, Audio, Image)
+        const isMedia =
+            file.mime_type?.startsWith('video/') ||
+            file.mime_type?.startsWith('audio/') ||
+            file.mime_type?.startsWith('image/') ||
+            /\.(mp4|webm|ogg|mov|mp3|wav|m4a|jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name);
+
+        if (isMedia) {
+            setMediaFile(file);
+            return;
         }
+
+        // Editable documents
+        const editableExts = ['docx', 'xlsx', 'pptx', 'txt', 'csv', 'odt', 'ods', 'odp', 'rtf', 'pdf'];
+        if (editableExts.includes(ext)) {
+            openEditor(file);
+            return;
+        }
+
+        // Fallback: Download
+        handleDownload(file);
     };
 
     // ─── Filtered & sorted files ───
@@ -323,6 +360,7 @@ export default function Dashboard() {
                     viewMode={viewMode}
                     onViewModeChange={setViewMode}
                     onUpload={handleUpload}
+                    onUploadFolder={handleFolderUpload}
                     onToggleActivity={() => setActivityOpen((p) => !p)}
                     showBackButton={!!editingFile || !!markdownFile}
                     onBack={() => {
@@ -431,6 +469,14 @@ export default function Dashboard() {
                             )}
                         </div>
                     </div>
+
+                    {/* Modals */}
+                    {mediaFile && (
+                        <MediaViewerModal
+                            file={mediaFile}
+                            onClose={() => setMediaFile(null)}
+                        />
+                    )}
 
                     {/* Activity Bar */}
                     <ActivityBar

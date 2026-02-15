@@ -1,8 +1,8 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import {
-    Search, Grid3x3, List, Upload, Sun, Moon, ChevronRight,
+    Search, Grid3x3, List, Upload, FolderUp, Sun, Moon, ChevronRight,
     LogOut, Home, Activity, ArrowLeft
 } from 'lucide-react';
 
@@ -14,6 +14,7 @@ export default function Navbar({
     viewMode,
     onViewModeChange,
     onUpload,
+    onUploadFolder,
     onToggleActivity,
     showBackButton,
     onBack,
@@ -21,10 +22,24 @@ export default function Navbar({
     const { isDark, toggle } = useTheme();
     const { user, logout } = useAuth();
     const fileInputRef = useRef(null);
+    const folderInputRef = useRef(null);
+
+    useEffect(() => {
+        if (folderInputRef.current) {
+            folderInputRef.current.setAttribute('webkitdirectory', '');
+            folderInputRef.current.setAttribute('directory', '');
+        }
+    }, []);
 
     const handleFileSelect = (e) => {
         const files = Array.from(e.target.files);
         if (files.length > 0) onUpload(files);
+        e.target.value = '';
+    };
+
+    const handleFolderSelect = (e) => {
+        const files = Array.from(e.target.files);
+        if (files.length > 0 && onUploadFolder) onUploadFolder(files);
         e.target.value = '';
     };
 
@@ -102,6 +117,17 @@ export default function Navbar({
             {!showBackButton && (
                 <>
                     <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
+                    <input ref={folderInputRef} type="file" className="hidden" multiple onChange={handleFolderSelect} />
+
+                    <button
+                        onClick={() => folderInputRef.current?.click()}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-lg transition-colors border border-[var(--border-color)] mr-2"
+                        title="Upload Folder"
+                    >
+                        <FolderUp className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline">Folder</span>
+                    </button>
+
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-[13px] font-medium rounded-lg transition-colors"
