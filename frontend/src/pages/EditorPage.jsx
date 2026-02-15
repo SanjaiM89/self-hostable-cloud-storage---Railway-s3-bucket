@@ -123,27 +123,21 @@ export default function EditorPage() {
             }
         };
 
+        fetchConfig();
+
         // Cleanup function
         return () => {
             mounted = false;
             if (editorInstanceRef.current) {
-                // DocsAPI doesn't have a clear destroy method officially documented for React unmount
-                // usually we just clear the container.
-                // But if there is a destroy method on instance:
                 if (editorInstanceRef.current.destroyEditor) {
                     editorInstanceRef.current.destroyEditor();
                 }
                 editorInstanceRef.current = null;
             }
 
-            // Also clear the container manually if needed
             const container = document.getElementById('onlyoffice-editor');
             if (container) container.innerHTML = "";
-
-            // Remove script? No, keep it cached.
         };
-
-        fetchConfig();
     }, [fileId, navigate]);
 
     return (
