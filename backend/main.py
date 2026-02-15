@@ -51,3 +51,37 @@ app.include_router(auth.router)
 app.include_router(files.router)
 app.include_router(sharing.router)
 # app.include_router(webhooks.router) # Removed as file was deleted
+
+@app.get("/debug-connection")
+def debug_connection():
+    import os
+    results = {
+        "env_vars": {
+            "DATABASE_URL_SET": bool(os.getenv("DATABASE_URL")),
+            "AWS_ACCESS_KEY_SET": bool(os.getenv("AWS_ACCESS_KEY_ID")),
+            "S3_BUCKET_NAME": os.getenv("S3_BUCKET_NAME"),
+            "S3_REGION_NAME": os.getenv("S3_REGION_NAME"),
+            "BACKEND_URL": os.getenv("BACKEND_URL")
+        }
+    }
+    
+    # Test DB
+    try:
+        from .database import SessionLocal
+        from sqlalchemy import text
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        results["database"] = "OK"
+    except Exception as e:
+        results["database"] = f"ERROR: {str(e)}"
+        
+    # Test S3
+    try:
+        from .storage import s3_client, BUCKET_NAME
+        s3_client.list_objects_v2(Bucket=BUCKET_NAME, MaxKeys=1)
+        results["s3"] = "OK"
+    except Exception as e:
+        results["s3"] = f"ERROR: {str(e)}"
+        
+    return results
