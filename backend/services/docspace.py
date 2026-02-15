@@ -16,17 +16,7 @@ class DocSpaceClient:
     def __init__(self):
         self.base_url = DOCSPACE_URL.rstrip("/")
         self.headers = {
-            "Authorization": f"{DOCSPACE_API_KEY}", # Assuming Bearer or direct key? Usually "Bearer <token>" or just key? 
-            # Reviewing docs: "The authorization header with the Bearer scheme" 
-            # But user gave "sk-..." which looks like Stripe/OpenAI key. 
-            # If it's a "Service" token, it might be Basic auth or customized. 
-            # Most DocSpace API keys are used as "Authorization: <key>" or "Authorization: Bearer <key>".
-            # I'll try without Bearer first if it spans "sk-". Or user might have meant "Token".
-            # Actually, standard DocSpace uses a JWT or a Session. 
-            # If "sk-" key is from "Developer Tools -> API Keys", it acts as a permanent token.
-            # I will assume "Authorization: <key>" for now, or "Authorization: Bearer <key>".
-            # Let's try Bearer.
-            "Content-Type": "application/json",
+            "Authorization": f"{DOCSPACE_API_KEY}", 
             "Accept": "application/json"
         }
         if not DOCSPACE_API_KEY.startswith("Bearer "):
@@ -39,8 +29,9 @@ class DocSpaceClient:
             "title": title,
             "roomType": 1 # 1 = Collaboration?
         }
-        # This is a complex call. For MVP, we might upload to "My Documents" (folderId = @my)
-        pass
+        # Use json=payload to auto-set Content-Type: application/json
+        response = requests.post(url, headers=self.headers, json=payload)
+        return response.json()
 
     def upload_file(self, file_content: bytes, file_name: str, folder_id="@my"):
         """Uploads a file to DocSpace"""
