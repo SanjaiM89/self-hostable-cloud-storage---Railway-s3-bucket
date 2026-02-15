@@ -8,7 +8,12 @@ except ImportError:
     from routers import auth, files, sharing, webhooks
 
 # Create tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Database setup error: {e}")
+    # Continue startup even if DB fails, to allow CORS/healthcheck
+    pass
 
 app = FastAPI(title="Cloud Storage API")
 
