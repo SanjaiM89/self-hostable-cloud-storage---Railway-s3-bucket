@@ -1,45 +1,120 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import remarkBreaks from 'remark-breaks';
-import rehypeRaw from 'rehype-raw';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Image from '@tiptap/extension-image';
+import Link from '@tiptap/extension-link';
+import Placeholder from '@tiptap/extension-placeholder';
+import Typography from '@tiptap/extension-typography';
+import { Markdown } from 'tiptap-markdown';
 import { filesAPI } from '../utils/api';
 import {
-    Eye, Edit3, Columns, Image as ImageIcon,
-    Bold, Italic, Code, Heading, List, Link,
-    Save, ArrowLeft
+    ArrowLeft, Save, Upload as UploadIcon,
+    Bold, Italic, Heading1, Heading2, List, ListOrdered,
+    Quote, Code, Image as ImageIcon, Link as LinkIcon,
+    Undo, Redo
 } from 'lucide-react';
 
 export default function MarkdownEditor({ file, onClose }) {
-    const [content, setContent] = useState('');
     const [originalContent, setOriginalContent] = useState('');
     const [saveStatus, setSaveStatus] = useState('saved');
-    const [viewMode, setViewMode] = useState('split'); // 'edit', 'preview', 'split'
     const [loading, setLoading] = useState(true);
     const saveTimerRef = useRef(null);
-    const textareaRef = useRef(null);
 
-    // Load file content
-    useEffect(() => {
-        const loadContent = async () => {
-            try {
-                setLoading(true);
-                const res = await filesAPI.getContent(file.id);
-                setContent(res.data.content || '');
-                setOriginalContent(res.data.content || '');
-            } catch (err) {
-                console.error('Failed to load markdown:', err);
-                setContent('# Error\n\nFailed to load file content.');
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadContent();
-    }, [file.id]);
+    // Image upload helper
+    const uploadImage = useCallback(async (file) => {
+        try {
+            setSaveStatus('saving');
+            const formData = new FormData();
+            formData.append('file', file);
+            const result = await filesAPI.upload(formData);
+            const fileData = result.data;
 
-    // Auto-save with debounce
+            // Get download URL for the uploaded image
+            const dlRes = await filesAPI.download(fileData.id);
+            return dlRes.data.url;
+        } catch (err) {
+            console.error('Image upload failed:', err);
+            setSaveStatus('error');
+            return null;
+        }
+    }, []);
+
+    // Tiptap Editor Setup
+    const editor = useEditor({
+        extensions: [
+            StarterKit.configure({
+                heading: { levels: [1, 2, 3] },
+            }),
+            Typography,
+            Image,
+            Link.configure({
+                openOnClick: false,
+            }),
+            Placeholder.configure({
+                placeholder: 'Start writing...',
+            }),
+            Markdown.configure({
+                html: false, // Force markdown output
+                transformPastedText: true,
+                transformCopiedText: true,
+            }),
+        ],
+        editorProps: {
+            attributes: {
+                class: 'prose prose-invert max-w-none focus:outline-none min-h-[calc(100vh-150px)] px-8 py-6',
+            },
+            handleDrop: (view, event, slice, moved) => {
+                if (!moved && event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+                    const file = event.dataTransfer.files[0];
+                    if (file.type.startsWith('image/')) {
+                        event.preventDefault();
+                        uploadImage(file).then(url => {
+                            if (url) {
+                                const { schema } = view.state;
+                                const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                                const node = schema.nodes.image.create({ src: url, alt: file.name });
+                                const transaction = view.state.tr.insert(coordinates.pos, node);
+                                view.dispatch(transaction);
+                            }
+                        });
+                        return true;
+                    }
+                }
+                return false;
+            },
+            handlePaste: (view, event, slice) => {
+                const items = event.clipboardData?.items;
+                if (items) {
+                    for (const item of items) {
+                        if (item.type.indexOf('image') !== -1) {
+                            event.preventDefault();
+                            const file = item.getAsFile();
+                            uploadImage(file).then(url => {
+                                if (url) {
+                                    const { schema } = view.state;
+                                    const node = schema.nodes.image.create({ src: url, alt: file.name || 'Pasted Image' });
+                                    const transaction = view.state.tr.replaceSelectionWith(node);
+                                    view.dispatch(transaction);
+                                }
+                            });
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            },
+        },
+        onUpdate: ({ editor }) => {
+            setSaveStatus('unsaved');
+            const markdown = editor.storage.markdown.getMarkdown();
+
+            // Debounced auto-save (1.5s)
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            saveTimerRef.current = setTimeout(() => saveContent(markdown), 1500);
+        },
+    });
+
+    // Save content
     const saveContent = useCallback(async (text) => {
         setSaveStatus('saving');
         try {
@@ -52,181 +127,87 @@ export default function MarkdownEditor({ file, onClose }) {
         }
     }, [file.id]);
 
-    const handleChange = useCallback((e) => {
-        const newContent = e.target.value;
-        setContent(newContent);
-        setSaveStatus('unsaved');
-
-        // Debounced auto-save (1.5s)
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => saveContent(newContent), 1500);
-    }, [saveContent]);
-
     // Save on Ctrl+S
     useEffect(() => {
         const handler = (e) => {
             if ((e.ctrlKey || e.metaKey) && e.key === 's') {
                 e.preventDefault();
-                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                saveContent(content);
+                if (editor) {
+                    const markdown = editor.storage.markdown.getMarkdown();
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                    saveContent(markdown);
+                }
             }
         };
         window.addEventListener('keydown', handler);
         return () => window.removeEventListener('keydown', handler);
-    }, [content, saveContent]);
+    }, [editor, saveContent]);
+
+    // Load file content
+    useEffect(() => {
+        const loadContent = async () => {
+            try {
+                setLoading(true);
+                const res = await filesAPI.getContent(file.id);
+                const content = res.data.content || '';
+                setOriginalContent(content);
+                // Load markdown into editor
+                if (editor) {
+                    editor.commands.setContent(content);
+                }
+            } catch (err) {
+                console.error('Failed to load markdown:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadContent();
+    }, [file.id, editor]); // Editor dependency ensures we load only after Tiptap is ready
 
     // Save before closing
     const handleClose = useCallback(async () => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        if (content !== originalContent) {
-            await saveContent(content);
+        if (editor) {
+            const currentMarkdown = editor.storage.markdown.getMarkdown();
+            // Compare normalized strings/check if meaningful change? 
+            // Tiptap's markdown serializer might produce slightly different output than input.
+            // For safety, just save if unsaved status.
+            if (saveStatus === 'unsaved') {
+                await saveContent(currentMarkdown);
+            }
         }
         onClose();
-    }, [content, originalContent, saveContent, onClose]);
+    }, [editor, saveStatus, saveContent, onClose]);
 
-    // Image upload helper
-    const uploadImage = useCallback(async (imgFile) => {
-        try {
-            setSaveStatus('saving');
-            const formData = new FormData();
-            formData.append('file', imgFile);
-            const result = await filesAPI.upload(formData);
-            const fileData = result.data;
-
-            // Get download URL for the uploaded image
-            const dlRes = await filesAPI.download(fileData.id);
-            const imageUrl = dlRes.data.url;
-
-            // Insert markdown image at cursor
-            const ta = textareaRef.current;
-            if (ta) {
-                const pos = ta.selectionStart;
-                const before = content.substring(0, pos);
-                const after = content.substring(pos);
-                const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
-                const newContent = before + imgMarkdown + after;
-                setContent(newContent);
-
-                // Restore cursor after image
-                setTimeout(() => {
-                    ta.focus();
-                    ta.selectionStart = ta.selectionEnd = pos + imgMarkdown.length;
-                }, 0);
-
-                setSaveStatus('unsaved');
-                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                saveTimerRef.current = setTimeout(() => saveContent(newContent), 1500);
-            } else {
-                // Fallback if ref unavailable (rare)
-                const imgMarkdown = `\n![${imgFile.name}](${imageUrl})\n`;
-                setContent(prev => prev + imgMarkdown);
-            }
-
-        } catch (err) {
-            console.error('Image upload failed:', err);
-            setSaveStatus('error');
-        }
-    }, [content, saveContent]);
-
-    // Image upload via button
-    const handleImageUpload = useCallback(async () => {
+    // Image upload button handler
+    const handleImageBtnClick = useCallback(() => {
         const input = document.createElement('input');
         input.type = 'file';
         input.accept = 'image/*';
         input.onchange = async (e) => {
-            const imgFile = e.target.files[0];
-            if (imgFile) uploadImage(imgFile);
+            const file = e.target.files[0];
+            if (file) {
+                const url = await uploadImage(file);
+                if (url && editor) {
+                    editor.chain().focus().setImage({ src: url, alt: file.name }).run();
+                }
+            }
         };
         input.click();
-    }, [uploadImage]);
-
-    // Clipboard paste handler (Ctrl+V)
-    useEffect(() => {
-        const handlePaste = async (e) => {
-            // Only handle if textarea is focused
-            if (document.activeElement !== textareaRef.current) return;
-
-            const items = e.clipboardData?.items;
-            if (!items) return;
-
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') !== -1) {
-                    e.preventDefault();
-                    const blob = items[i].getAsFile();
-                    if (blob) {
-                        const file = new File([blob], `pasted-${Date.now()}.png`, { type: blob.type });
-                        uploadImage(file);
-                    }
-                    break;
-                }
-            }
-        };
-
-        document.addEventListener('paste', handlePaste);
-        return () => document.removeEventListener('paste', handlePaste);
-    }, [uploadImage]);
-
-    // Drag and drop handler
-    useEffect(() => {
-        const ta = textareaRef.current;
-        if (!ta) return;
-
-        const handleDragOver = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-        };
-
-        const handleDrop = async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const files = e.dataTransfer?.files;
-            if (!files || files.length === 0) return;
-
-            for (let i = 0; i < files.length; i++) {
-                const file = files[i];
-                if (file.type.startsWith('image/')) {
-                    uploadImage(file);
-                }
-            }
-        };
-
-        ta.addEventListener('dragover', handleDragOver);
-        ta.addEventListener('drop', handleDrop);
-        return () => {
-            ta.removeEventListener('dragover', handleDragOver);
-            ta.removeEventListener('drop', handleDrop);
-        };
-    }, [uploadImage]);
-
-
-    // Toolbar insert helpers
-    const insertAtCursor = useCallback((before, after = '') => {
-        const ta = textareaRef.current;
-        if (!ta) return;
-        const start = ta.selectionStart;
-        const end = ta.selectionEnd;
-        const selected = content.substring(start, end);
-        const newContent = content.substring(0, start) + before + selected + after + content.substring(end);
-        setContent(newContent);
-        setSaveStatus('unsaved');
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => saveContent(newContent), 1500);
-        setTimeout(() => {
-            ta.focus();
-            ta.selectionStart = start + before.length;
-            ta.selectionEnd = start + before.length + selected.length;
-        }, 0);
-    }, [content, saveContent]);
+    }, [editor, uploadImage]);
 
     // Badge styles
     const badgeStyle = {
-        saved: { bg: 'rgba(6, 95, 70, 0.95)', color: '#d1fae5', icon: '✓', text: 'Saved to S3' },
+        saved: { bg: 'rgba(6, 95, 70, 0.95)', color: '#d1fae5', icon: '✓', text: 'Saved' },
         unsaved: { bg: 'rgba(146, 64, 14, 0.95)', color: '#fef3c7', icon: '●', text: 'Unsaved' },
         saving: { bg: 'rgba(30, 64, 175, 0.95)', color: '#dbeafe', icon: '⟳', text: 'Saving...' },
-        error: { bg: 'rgba(153, 27, 27, 0.95)', color: '#fecaca', icon: '✗', text: 'Save failed' },
+        error: { bg: 'rgba(153, 27, 27, 0.95)', color: '#fecaca', icon: '✗', text: 'Error' },
     };
     const badge = badgeStyle[saveStatus] || badgeStyle.saved;
+
+    if (!editor) {
+        return null;
+    }
 
     if (loading) {
         return (
@@ -235,14 +216,8 @@ export default function MarkdownEditor({ file, onClose }) {
                 background: 'var(--bg-primary)', color: 'var(--text-secondary)',
             }}>
                 <div style={{ textAlign: 'center' }}>
-                    <div style={{
-                        width: '28px', height: '28px',
-                        border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent)',
-                        borderRadius: '50%', animation: 'spin 0.6s linear infinite',
-                        margin: '0 auto 10px',
-                    }} />
-                    Loading markdown...
-                    <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                    <div className="w-8 h-8 border-2 border-t-[var(--accent)] rounded-full animate-spin mx-auto mb-2" />
+                    Loading content...
                 </div>
             </div>
         );
@@ -256,206 +231,191 @@ export default function MarkdownEditor({ file, onClose }) {
         }}>
             {/* Toolbar */}
             <div style={{
-                height: '42px', display: 'flex', alignItems: 'center', gap: '2px',
-                padding: '0 12px', borderBottom: '1px solid var(--border-color)',
-                background: 'var(--card-bg)', flexShrink: 0,
+                height: '50px', display: 'flex', alignItems: 'center', gap: '4px',
+                padding: '0 16px', borderBottom: '1px solid var(--border-color)',
+                background: 'var(--bg-primary)', flexShrink: 0,
+                zIndex: 10,
             }}>
                 <button onClick={handleClose} style={toolBtnStyle} title="Back">
-                    <ArrowLeft size={15} />
+                    <ArrowLeft size={18} />
                 </button>
-                <span style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 6px' }} />
-                <span style={{
-                    fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)',
-                    maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    marginRight: '8px',
-                }}>{file.name}</span>
+                <div className="h-5 w-px bg-[var(--border-color)] mx-2" />
+                <span className="font-semibold text-sm truncate max-w-[200px] mr-4">
+                    {file.name}
+                </span>
 
-                {/* Format buttons */}
-                <button onClick={() => insertAtCursor('**', '**')} style={toolBtnStyle} title="Bold"><Bold size={14} /></button>
-                <button onClick={() => insertAtCursor('*', '*')} style={toolBtnStyle} title="Italic"><Italic size={14} /></button>
-                <button onClick={() => insertAtCursor('# ')} style={toolBtnStyle} title="Heading"><Heading size={14} /></button>
-                <button onClick={() => insertAtCursor('`', '`')} style={toolBtnStyle} title="Inline code"><Code size={14} /></button>
-                <button onClick={() => insertAtCursor('\n```\n', '\n```\n')} style={toolBtnStyle} title="Code block">
-                    <span style={{ fontSize: '11px', fontFamily: 'monospace', fontWeight: 700 }}>{'{ }'}</span>
+                {/* Editor Actions */}
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleBold().run()}
+                    isActive={editor.isActive('bold')}
+                    icon={<Bold size={16} />}
+                    title="Bold"
+                />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleItalic().run()}
+                    isActive={editor.isActive('italic')}
+                    icon={<Italic size={16} />}
+                    title="Italic"
+                />
+                <div className="h-4 w-px bg-[var(--border-color)] mx-1" />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                    isActive={editor.isActive('heading', { level: 1 })}
+                    icon={<Heading1 size={16} />}
+                    title="Heading 1"
+                />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                    isActive={editor.isActive('heading', { level: 2 })}
+                    icon={<Heading2 size={16} />}
+                    title="Heading 2"
+                />
+                <div className="h-4 w-px bg-[var(--border-color)] mx-1" />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleBulletList().run()}
+                    isActive={editor.isActive('bulletList')}
+                    icon={<List size={16} />}
+                    title="Bullet List"
+                />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                    isActive={editor.isActive('orderedList')}
+                    icon={<ListOrdered size={16} />}
+                    title="Ordered List"
+                />
+                <div className="h-4 w-px bg-[var(--border-color)] mx-1" />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                    isActive={editor.isActive('blockquote')}
+                    icon={<Quote size={16} />}
+                    title="Blockquote"
+                />
+                <ToolbarButton
+                    onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+                    isActive={editor.isActive('codeBlock')}
+                    icon={<Code size={16} />}
+                    title="Code Block"
+                />
+                <ToolbarButton
+                    onClick={handleImageBtnClick}
+                    icon={<ImageIcon size={16} />}
+                    title="Insert Image"
+                />
+
+                <div className="flex-1" />
+
+                {/* Save Status Badge */}
+                <button
+                    onClick={() => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); saveContent(editor.storage.markdown.getMarkdown()); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md hover:bg-[var(--bg-secondary)] transition-colors text-xs font-medium"
+                    style={{ color: badge.color, background: badge.bg }}
+                    title="Save now (Ctrl+S)"
+                >
+                    <span className="text-[10px]">{badge.icon}</span>
+                    {badge.text}
                 </button>
-                <button onClick={() => insertAtCursor('- ')} style={toolBtnStyle} title="List"><List size={14} /></button>
-                <button onClick={() => insertAtCursor('[', '](url)')} style={toolBtnStyle} title="Link"><Link size={14} /></button>
-                <button onClick={handleImageUpload} style={toolBtnStyle} title="Upload image"><ImageIcon size={14} /></button>
-                <span style={{ width: '1px', height: '18px', background: 'var(--border-color)', margin: '0 6px' }} />
+            </div>
 
-                {/* View mode toggles */}
-                <button onClick={() => setViewMode('edit')} style={{
-                    ...toolBtnStyle,
-                    background: viewMode === 'edit' ? 'var(--accent)' : undefined,
-                    color: viewMode === 'edit' ? '#1e1e2e' : undefined,
-                }} title="Edit only"><Edit3 size={14} /></button>
-                <button onClick={() => setViewMode('split')} style={{
-                    ...toolBtnStyle,
-                    background: viewMode === 'split' ? 'var(--accent)' : undefined,
-                    color: viewMode === 'split' ? '#1e1e2e' : undefined,
-                }} title="Split view"><Columns size={14} /></button>
-                <button onClick={() => setViewMode('preview')} style={{
-                    ...toolBtnStyle,
-                    background: viewMode === 'preview' ? 'var(--accent)' : undefined,
-                    color: viewMode === 'preview' ? '#1e1e2e' : undefined,
-                }} title="Preview only"><Eye size={14} /></button>
-
-                {/* Save status */}
-                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <div style={{
-                        display: 'flex', alignItems: 'center', gap: '5px',
-                        padding: '4px 10px', borderRadius: '6px',
-                        background: badge.bg, color: badge.color,
-                        fontSize: '11px', fontWeight: 600,
-                    }}>
-                        <span style={{ fontSize: '12px' }}>{badge.icon}</span> {badge.text}
-                    </div>
-                    <button onClick={() => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); saveContent(content); }}
-                        style={toolBtnStyle} title="Save now (Ctrl+S)"><Save size={14} /></button>
+            {/* Editor Content Area */}
+            <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent bg-[var(--bg-primary)]">
+                <div className="max-w-3xl mx-auto py-8">
+                    <EditorContent editor={editor} />
                 </div>
             </div>
 
-            {/* Editor + Preview panes */}
-            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-                {/* Editor pane */}
-                {(viewMode === 'edit' || viewMode === 'split') && (
-                    <div style={{
-                        flex: 1, display: 'flex', flexDirection: 'column',
-                        borderRight: viewMode === 'split' ? '1px solid var(--border-color)' : 'none',
-                    }}>
-                        <textarea
-                            ref={textareaRef}
-                            value={content}
-                            onChange={handleChange}
-                            spellCheck={false}
-                            style={{
-                                flex: 1, resize: 'none', border: 'none', outline: 'none',
-                                padding: '20px 24px',
-                                background: 'var(--bg-primary)',
-                                color: 'var(--text-primary)',
-                                fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace",
-                                fontSize: '13.5px', lineHeight: '1.7',
-                                tabSize: 4,
-                            }}
-                            onKeyDown={(e) => {
-                                // Tab support
-                                if (e.key === 'Tab') {
-                                    e.preventDefault();
-                                    const start = e.target.selectionStart;
-                                    const end = e.target.selectionEnd;
-                                    const newContent = content.substring(0, start) + '    ' + content.substring(end);
-                                    setContent(newContent);
-                                    setTimeout(() => {
-                                        e.target.selectionStart = e.target.selectionEnd = start + 4;
-                                    }, 0);
-                                }
-                            }}
-                        />
-                    </div>
-                )}
-
-                {/* Preview pane */}
-                {(viewMode === 'preview' || viewMode === 'split') && (
-                    <div style={{
-                        flex: 1, overflowY: 'auto', padding: '24px 32px',
-                        background: 'var(--bg-secondary, #181825)',
-                    }}>
-                        <div className="markdown-preview" style={{ maxWidth: '800px', margin: '0 auto' }}>
-                            <ReactMarkdown
-                                remarkPlugins={[remarkGfm, remarkBreaks]}
-                                rehypePlugins={[rehypeRaw]}
-                                components={{
-                                    code({ node, inline, className, children, ...props }) {
-                                        const match = /language-(\w+)/.exec(className || '');
-                                        return !inline && match ? (
-                                            <SyntaxHighlighter
-                                                style={oneDark}
-                                                language={match[1]}
-                                                PreTag="div"
-                                                customStyle={{
-                                                    borderRadius: '8px',
-                                                    fontSize: '13px',
-                                                    margin: '16px 0',
-                                                }}
-                                                {...props}
-                                            >
-                                                {String(children).replace(/\n$/, '')}
-                                            </SyntaxHighlighter>
-                                        ) : !inline ? (
-                                            <SyntaxHighlighter
-                                                style={oneDark}
-                                                language="text"
-                                                PreTag="div"
-                                                customStyle={{
-                                                    borderRadius: '8px',
-                                                    fontSize: '13px',
-                                                    margin: '16px 0',
-                                                }}
-                                                {...props}
-                                            >
-                                                {String(children).replace(/\n$/, '')}
-                                            </SyntaxHighlighter>
-                                        ) : (
-                                            <code style={{
-                                                background: 'rgba(255,255,255,0.08)',
-                                                padding: '2px 6px', borderRadius: '4px',
-                                                fontSize: '0.9em', fontFamily: 'monospace',
-                                                color: '#f38ba8',
-                                            }} {...props}>
-                                                {children}
-                                            </code>
-                                        );
-                                    },
-                                    img({ src, alt, ...props }) {
-                                        return (
-                                            <img
-                                                src={src} alt={alt || ''}
-                                                style={{
-                                                    maxWidth: '100%', borderRadius: '8px',
-                                                    margin: '12px 0', cursor: 'pointer',
-                                                }}
-                                                {...props}
-                                            />
-                                        );
-                                    },
-                                }}
-                            >
-                                {content}
-                            </ReactMarkdown>
-                        </div>
-                    </div>
-                )}
-            </div>
-
-            {/* Markdown preview styles */}
             <style>{`
-                .markdown-preview { color: var(--text-primary); }
-                .markdown-preview h1 { font-size: 2em; font-weight: 700; margin: 24px 0 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; }
-                .markdown-preview h2 { font-size: 1.5em; font-weight: 600; margin: 20px 0 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 6px; }
-                .markdown-preview h3 { font-size: 1.25em; font-weight: 600; margin: 16px 0 8px; }
-                .markdown-preview h4 { font-size: 1.1em; font-weight: 600; margin: 14px 0 6px; }
-                .markdown-preview p { margin: 8px 0; line-height: 1.7; }
-                .markdown-preview ul, .markdown-preview ol { padding-left: 24px; margin: 8px 0; }
-                .markdown-preview li { margin: 4px 0; line-height: 1.6; }
-                .markdown-preview blockquote { border-left: 3px solid var(--accent); padding: 8px 16px; margin: 12px 0; background: rgba(255,255,255,0.03); border-radius: 0 6px 6px 0; }
-                .markdown-preview a { color: var(--accent); text-decoration: none; }
-                .markdown-preview a:hover { text-decoration: underline; }
-                .markdown-preview table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-                .markdown-preview th, .markdown-preview td { border: 1px solid var(--border-color); padding: 8px 12px; text-align: left; }
-                .markdown-preview th { background: rgba(255,255,255,0.05); font-weight: 600; }
-                .markdown-preview hr { border: none; border-top: 1px solid var(--border-color); margin: 20px 0; }
-                .markdown-preview pre { margin: 0 !important; }
-                .markdown-preview strong { font-weight: 600; }
-                .markdown-preview em { font-style: italic; }
+                /* Tiptap Editor Styles */
+                .ProseMirror {
+                    color: var(--text-primary);
+                    font-size: 1.1rem;
+                    line-height: 1.75;
+                }
+                .ProseMirror p { margin-bottom: 1.25em; }
+                .ProseMirror h1 { font-size: 2.25em; font-weight: 800; margin-top: 1.5em; margin-bottom: 0.8em; line-height: 1.1; }
+                .ProseMirror h2 { font-size: 1.75em; font-weight: 700; margin-top: 1.5em; margin-bottom: 0.8em; line-height: 1.3; }
+                .ProseMirror h3 { font-size: 1.5em; font-weight: 600; margin-top: 1.5em; margin-bottom: 0.8em; }
+                
+                .ProseMirror ul { list-style-type: disc; padding-left: 1.6em; margin-bottom: 1.25em; }
+                .ProseMirror ol { list-style-type: decimal; padding-left: 1.6em; margin-bottom: 1.25em; }
+                
+                .ProseMirror blockquote { 
+                    border-left: 4px solid var(--accent); 
+                    padding-left: 1em; 
+                    margin-left: 0; 
+                    margin-right: 0; 
+                    font-style: italic; 
+                    color: var(--text-secondary);
+                }
+                
+                .ProseMirror pre { 
+                    background: #1e1e2e; 
+                    color: #e2e8f0; 
+                    padding: 0.75rem 1rem; 
+                    border-radius: 0.5rem; 
+                    font-family: 'JetBrains Mono', monospace; 
+                    font-size: 0.9em;
+                    overflow-x: auto;
+                }
+                .ProseMirror code { 
+                    background: rgba(255,255,255,0.1); 
+                    color: #ff79c6; 
+                    padding: 0.2rem 0.4rem; 
+                    border-radius: 0.25rem; 
+                    font-family: monospace; 
+                    font-size: 0.9em;
+                }
+                .ProseMirror pre code { 
+                    background: none; 
+                    color: inherit; 
+                    padding: 0; 
+                }
+
+                .ProseMirror img {
+                    border-radius: 8px;
+                    max-width: 100%;
+                    height: auto;
+                    margin: 1.5rem 0;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                }
+                
+                .ProseMirror a {
+                    color: var(--accent);
+                    text-decoration: underline;
+                    cursor: pointer;
+                }
+
+                /* Placeholder */
+                .ProseMirror p.is-editor-empty:first-child::before {
+                    color: #64748b;
+                    content: attr(data-placeholder);
+                    float: left;
+                    height: 0;
+                    pointer-events: none;
+                }
             `}</style>
         </div>
     );
 }
 
-// Toolbar button base style
+const ToolbarButton = ({ onClick, isActive, icon, title }) => (
+    <button
+        onClick={onClick}
+        title={title}
+        className={`
+            p-1.5 rounded-md transition-all
+            ${isActive
+                ? 'bg-[var(--accent)] text-white shadow-sm'
+                : 'text-[var(--text-secondary)] hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]'
+            }
+        `}
+    >
+        {icon}
+    </button>
+);
+
 const toolBtnStyle = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    width: '30px', height: '28px', borderRadius: '6px',
+    width: '32px', height: '32px', borderRadius: '6px',
     border: 'none', cursor: 'pointer',
     background: 'transparent', color: 'var(--text-secondary)',
     transition: 'all 0.15s',
