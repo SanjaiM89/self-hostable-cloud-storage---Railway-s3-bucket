@@ -14,12 +14,16 @@ import os
 
 router = APIRouter(prefix="/docspace", tags=["docspace"])
 
-@router.post("/webhook")
+@router.api_route("/webhook", methods=["POST", "HEAD"])
 async def docspace_webhook(request: Request, db: Session = Depends(get_db)):
     """
     Handle DocSpace webhooks.
     When a file is updated in DocSpace, sync it back to S3.
     """
+    if request.method == "HEAD":
+        print("DocSpace Webhook HEAD verification")
+        return {}
+
     try:
         payload = await request.json()
         print(f"DocSpace Webhook Payload: {payload}")
