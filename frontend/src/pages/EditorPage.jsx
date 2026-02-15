@@ -30,7 +30,13 @@ export default function EditorPage() {
                     height: "100%",
                     events: {
                         onAppReady: () => console.log('OnlyOffice Ready'),
-                        onError: (err) => console.error('OnlyOffice Error:', err),
+                        onError: (event) => {
+                            console.error('OnlyOffice Error Event:', event);
+                            if (event && event.data) {
+                                console.error("Error Code:", event.data.errorCode);
+                                console.error("Error Description:", event.data.errorDescription);
+                            }
+                        },
                         // Validation error?
                         onRequestClose: () => {
                             console.log("Closing Editor");
@@ -63,9 +69,12 @@ export default function EditorPage() {
 
                 if (mounted) setFileName(config.document?.title || 'Document');
 
-                const onlyofficeUrl = config.onlyoffice_url;
+                // Prioritize Env Var (Vercel) -> Backend Config -> Default
+                const onlyofficeUrl = import.meta.env.VITE_ONLYOFFICE_URL || config.onlyoffice_url;
+                console.log("Using OnlyOffice URL:", onlyofficeUrl);
+
                 if (!onlyofficeUrl) {
-                    throw new Error("Backend did not return OnlyOffice URL");
+                    throw new Error("OnlyOffice URL not found in Env (VITE_ONLYOFFICE_URL) or Backend Config");
                 }
 
                 // Check if script already loaded
