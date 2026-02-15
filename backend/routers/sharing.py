@@ -8,10 +8,16 @@ import os
 import datetime
 import jwt as pyjwt
 
-from ..database import get_db
-from ..models import File as FileModel, User, FileShare
-from ..auth.utils import decode_access_token
-from ..storage import generate_presigned_url
+try:
+    from ..database import get_db
+    from ..models import File as FileModel, User, FileShare
+    from ..auth.utils import decode_access_token
+    from ..storage import generate_presigned_url
+except ImportError:
+    from database import get_db
+    from models import File as FileModel, User, FileShare
+    from auth.utils import decode_access_token
+    from storage import generate_presigned_url
 from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter(prefix="/shares", tags=["shares"])

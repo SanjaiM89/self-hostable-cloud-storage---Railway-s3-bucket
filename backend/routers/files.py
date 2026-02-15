@@ -2,10 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from ..database import get_db
-from ..models import File as FileModel, User
-from ..auth.utils import decode_access_token
-from ..storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+try:
+    from ..database import get_db
+    from ..models import File as FileModel, User
+    from ..auth.utils import decode_access_token
+    from ..storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+except ImportError:
+    from database import get_db
+    from models import File as FileModel, User
+    from auth.utils import decode_access_token
+    from storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import uuid
