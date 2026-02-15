@@ -10,6 +10,16 @@ except ImportError:
 # Create tables
 try:
     Base.metadata.create_all(bind=engine)
+    
+    # DEBUG: Inspect table columns
+    from sqlalchemy import inspect
+    inspector = inspect(engine)
+    if "files" in inspector.get_table_names():
+        columns = [c["name"] for c in inspector.get_columns("files")]
+        print(f"DEBUG: 'files' table columns in this DB: {columns}")
+    else:
+        print("DEBUG: 'files' table NOT FOUND in this DB")
+
 except Exception as e:
     print(f"Database setup error: {e}")
     # Continue startup even if DB fails, to allow CORS/healthcheck
