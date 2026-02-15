@@ -1,5 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Body, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+try:
+    from ..utils.encryption import encrypt_id, decrypt_id
+except ImportError:
+    from utils.encryption import encrypt_id, decrypt_id
 from sqlalchemy.orm import Session
 from typing import List, Optional
 try:
@@ -277,12 +281,46 @@ def create_folder(
     }
 
 
+@router.get("/stream/{token}")
+def stream_file(token: str, db: Session = Depends(get_db)):
+    """Stream file from S3 through backend to hide bucket URL."""
+    file_id = decrypt_id(token)
+    if not file_id:
+        # Prevent enumeration
+        raise HTTPException(status_code=400, detail="Invalid link")
+
+    file = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        # Stream from S3
+        s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
+        
+        # Safe headers
+        headers = {
+            "Content-Disposition": f'attachment; filename="{file.name}"',
+            "Content-Length": str(file.size),
+        }
+        
+        return StreamingResponse(
+            s3_response['Body'],
+            media_type=file.mime_type or "application/octet-stream",
+            headers=headers
+        )
+    except Exception as e:
+        print(f"Stream error: {e}")
+        raise HTTPException(status_code=500, detail="Could not stream file")
+
+
 @router.get("/download/{file_id}")
 def download_file(
     file_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    """Get a secure, encrypted download URL that proxies the file."""
     file = db.query(FileModel).filter(
         FileModel.id == file_id,
         FileModel.user_id == current_user.id
@@ -291,12 +329,15 @@ def download_file(
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
     
-    url = generate_presigned_url(file.s3_key)
-    if not url:
-        raise HTTPException(status_code=500, detail="Could not generate download URL")
+    # Encrypt the ID to hide it
+    token = encrypt_id(file.id)
+    
+    # Construct absolute URL to the stream endpoint
+    # base_url usually ends with /
+    proxy_url = f"{str(request.base_url).rstrip('/')}/files/stream/{token}"
     
     return {
-        "url": url,
+        "url": proxy_url,
         "filename": file.name,
         "mime_type": file.mime_type,
     }

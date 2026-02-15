@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 from pydantic import BaseModel
@@ -228,8 +228,23 @@ def download_shared_file(token: str, db: Session = Depends(get_db)):
     if not file or not file.s3_key:
         raise HTTPException(status_code=404, detail="File not found")
 
-    url = generate_presigned_url(file.s3_key)
-    return {"url": url, "name": file.name}
+    try:
+        # Stream from S3
+        s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
+        
+        headers = {
+            "Content-Disposition": f'attachment; filename="{file.name}"',
+            "Content-Length": str(file.size),
+        }
+        
+        return StreamingResponse(
+            s3_response['Body'],
+            media_type=file.mime_type or "application/octet-stream",
+            headers=headers
+        )
+    except Exception as e:
+        print(f"Stream error: {e}")
+        raise HTTPException(status_code=500, detail="Could not stream file")
 
 
 @router.get("/public/{token}/editor-config")
