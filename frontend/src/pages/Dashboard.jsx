@@ -149,8 +149,13 @@ export default function Dashboard() {
             const res = await filesAPI.createDocument(name, docType, currentFolder);
             updateActivity(aid, { status: 'done', name: res.data.name });
             fetchFiles();
-            // Auto-open the new document in editor
-            openEditor(res.data);
+            // Auto-open: markdown files go to MarkdownEditor, others to OnlyOffice
+            if (docType === 'markdown') {
+                setMarkdownFile(res.data);
+                setBreadcrumbs((prev) => [...prev, { id: `md-${res.data.id}`, name: res.data.name }]);
+            } else {
+                openEditor(res.data);
+            }
         } catch (err) {
             console.error('Create document failed:', err);
             updateActivity(aid, { status: 'error' });

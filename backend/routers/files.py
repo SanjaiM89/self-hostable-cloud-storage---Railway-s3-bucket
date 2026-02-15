@@ -651,6 +651,10 @@ def create_document(
         prs.save(buf)
         ext = "pptx"
         mime = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    elif data.doc_type == "markdown":
+        buf.write(f"# {data.name}\n\nStart writing here...\n".encode('utf-8'))
+        ext = "md"
+        mime = "text/markdown"
     else:
         raise HTTPException(status_code=400, detail="Invalid doc_type")
 

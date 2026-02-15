@@ -377,6 +377,16 @@ export default function FileGrid({
                     });
                 }
             });
+            items.push({
+                icon: Code, label: 'New Markdown', action: () => {
+                    setInputModal({
+                        title: 'Create Markdown File',
+                        placeholder: 'File name',
+                        defaultValue: 'Untitled',
+                        onConfirm: (name) => { setInputModal(null); onCreateDocument(name, 'markdown'); },
+                    });
+                }
+            });
             items.push({ divider: true });
             items.push({ icon: RefreshCw, label: 'Refresh', action: onRefresh });
         }
