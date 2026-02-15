@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15
+    container_name: cloud_storage_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  onlyoffice:
+    image: onlyoffice/documentserver
+    container_name: cloud_storage_onlyoffice
+    ports:
+      - "8080:80"
+      - "4433:443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - JWT_ENABLED=true
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
+      - JWT_HEADER=Authorization
+      - JWT_IN_BODY=true
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_log:/var/log/onlyoffice
+      - onlyoffice_lib:/var/lib/onlyoffice
+      - onlyoffice_db:/var/lib/postgresql
+
+volumes:
+  postgres_data:
+  onlyoffice_data:
+  onlyoffice_log:
+  onlyoffice_lib:
+  onlyoffice_db:

@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# JavaScript / Node
+node_modules/
+dist/
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Docker
+postgres_data/
+onlyoffice_data/
+onlyoffice_log/
+onlyoffice_lib/
+onlyoffice_db/
