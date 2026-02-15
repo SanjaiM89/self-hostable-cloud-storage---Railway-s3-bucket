@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { FiLink, FiCopy, FiCheck, FiTrash2, FiUserPlus, FiGlobe, FiX } from 'react-icons/fi';
+import { Link, Copy, Check, Trash2, UserPlus, Globe, X } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
 
 export default function ShareModal({ file, onClose }) {
@@ -125,7 +125,7 @@ export default function ShareModal({ file, onClose }) {
                         onClick={onClose}
                         className="p-1 rounded-lg text-[var(--text-tertiary)] hover:bg-[var(--card-hover)] transition-colors"
                     >
-                        <FiX className="w-4 h-4" />
+                        <X className="w-4 h-4" />
                     </button>
                 </div>
 
@@ -138,7 +138,7 @@ export default function ShareModal({ file, onClose }) {
                         {/* ── Public Link Section ── */}
                         <div className="mb-4">
                             <div className="flex items-center gap-2 mb-2">
-                                <FiGlobe className="w-4 h-4 text-[var(--text-tertiary)]" />
+                                <Globe className="w-4 h-4 text-[var(--text-tertiary)]" />
                                 <span className="text-[13px] font-medium text-[var(--text-secondary)]">Public Link</span>
                             </div>
 
@@ -179,7 +179,7 @@ export default function ShareModal({ file, onClose }) {
                                             onClick={copyLink}
                                             className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-[var(--accent)] text-[#1e1e2e] hover:brightness-110 transition-all"
                                         >
-                                            {copied ? <FiCheck className="w-3.5 h-3.5" /> : <FiCopy className="w-3.5 h-3.5" />}
+                                            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                                             {copied ? 'Copied' : 'Copy'}
                                         </button>
                                     </div>
@@ -192,7 +192,7 @@ export default function ShareModal({ file, onClose }) {
                         {/* ── Share with Users ── */}
                         <div>
                             <div className="flex items-center gap-2 mb-2">
-                                <FiUserPlus className="w-4 h-4 text-[var(--text-tertiary)]" />
+                                <UserPlus className="w-4 h-4 text-[var(--text-tertiary)]" />
                                 <span className="text-[13px] font-medium text-[var(--text-secondary)]">Share with Users</span>
                             </div>
 
@@ -243,7 +243,7 @@ export default function ShareModal({ file, onClose }) {
                                                 onClick={() => removeUser(s.id)}
                                                 className="p-1 rounded text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-red-500/10 transition-colors"
                                             >
-                                                <FiTrash2 className="w-3.5 h-3.5" />
+                                                <Trash2 className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
                                     ))}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
-import { FiDownload, FiFile, FiLock } from 'react-icons/fi';
+import { Download, File, Lock } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
 
 export default function SharedFilePage() {
@@ -98,7 +98,7 @@ export default function SharedFilePage() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
                 <div className="text-center space-y-4">
-                    <FiLock className="w-12 h-12 mx-auto text-[var(--text-tertiary)]" />
+                    <Lock className="w-12 h-12 mx-auto text-[var(--text-tertiary)]" />
                     <h2 className="text-xl font-semibold text-[var(--text-primary)]">Access Denied</h2>
                     <p className="text-[var(--text-secondary)] text-sm">{error}</p>
                 </div>
@@ -112,7 +112,7 @@ export default function SharedFilePage() {
             <div className="h-screen w-screen flex flex-col bg-[var(--bg-primary)]">
                 {/* Minimal top bar */}
                 <div className="h-10 flex items-center px-4 border-b border-[var(--border-color)] bg-[var(--card-bg)] shrink-0">
-                    <FiFile className="w-4 h-4 text-[var(--accent)] mr-2" />
+                    <File className="w-4 h-4 text-[var(--accent)] mr-2" />
                     <span className="text-[13px] text-[var(--text-primary)] font-medium truncate">{fileInfo.name}</span>
                     <span className="ml-2 text-[10px] text-[var(--text-tertiary)] px-1.5 py-0.5 rounded bg-[var(--bg-secondary)]">
                         {fileInfo.permission === 'view' ? 'View Only' : fileInfo.permission === 'download' ? 'View & Download' : 'Editing'}
@@ -122,7 +122,7 @@ export default function SharedFilePage() {
                             onClick={handleDownload}
                             className="ml-auto flex items-center gap-1 px-3 py-1 rounded-lg text-[12px] font-medium bg-[var(--accent)] text-[#1e1e2e] hover:brightness-110 transition-all"
                         >
-                            <FiDownload className="w-3.5 h-3.5" /> Download
+                            <Download className="w-3.5 h-3.5" /> Download
                         </button>
                     )}
                 </div>
@@ -136,7 +136,7 @@ export default function SharedFilePage() {
         <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
             <div className="w-[400px] rounded-xl border border-[var(--border-color)] bg-[var(--card-bg)] shadow-2xl overflow-hidden">
                 <div className="p-8 text-center">
-                    <FiFile className="w-16 h-16 mx-auto text-[var(--accent)] mb-4" />
+                    <File className="w-16 h-16 mx-auto text-[var(--accent)] mb-4" />
                     <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-1">{fileInfo.name}</h2>
                     <p className="text-[13px] text-[var(--text-tertiary)] mb-6">
                         {(fileInfo.size / 1024).toFixed(1)} KB • Shared file
@@ -151,7 +151,7 @@ export default function SharedFilePage() {
                             onClick={handleDownload}
                             className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg text-[14px] font-medium bg-[var(--accent)] text-[#1e1e2e] hover:brightness-110 transition-all"
                         >
-                            <FiDownload className="w-4 h-4" /> Download File
+                            <Download className="w-4 h-4" /> Download File
                         </button>
                     )}
                 </div>
