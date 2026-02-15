@@ -5,6 +5,12 @@
             "use": "@vercel/python"
         }
     ],
+    "rewrites": [
+        {
+            "source": "/(.*)",
+            "destination": "/main.py"
+        }
+    ],
     "headers": [
         {
             "source": "/(.*)",
@@ -22,12 +28,6 @@
                     "value": "Authorization, Content-Type, Accept"
                 }
             ]
-        }
-    ],
-    "routes": [
-        {
-            "src": "/(.*)",
-            "dest": "main.py"
         }
     ]
 }
