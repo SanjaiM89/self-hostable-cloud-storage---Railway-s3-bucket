@@ -2,10 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 try:
     from .database import engine, Base
-    from .routers import auth, files, sharing
+    from .routers import auth, files, sharing, webhooks
 except ImportError:
     from database import engine, Base
-    from routers import auth, files, sharing
+    from routers import auth, files, sharing, webhooks
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -34,3 +34,4 @@ def read_root():
 app.include_router(auth.router)
 app.include_router(files.router)
 app.include_router(sharing.router)
+app.include_router(webhooks.router)

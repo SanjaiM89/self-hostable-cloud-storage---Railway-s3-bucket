@@ -241,10 +241,9 @@ def get_editor_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Generate OnlyOffice editor config with JWT token"""
-    import jwt as pyjwt
-    import os
-    import socket
+    """Generate configuration for DocSpace Editor SDK"""
+    from ..services.docspace import docspace_client, DOCSPACE_URL
+    import requests
     
     file = db.query(FileModel).filter(
         FileModel.id == file_id,
@@ -253,76 +252,50 @@ def get_editor_config(
     
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
-    
-    # Get presigned URL for the file
-    file_url = generate_presigned_url(file.s3_key, expiration=7200)
-    if not file_url:
-        raise HTTPException(status_code=500, detail="Could not generate file URL")
-    
-    # Determine document type and file type
-    ext = file.name.rsplit('.', 1)[-1].lower() if '.' in file.name else ''
-    
-    word_exts = ['doc', 'docx', 'odt', 'rtf', 'txt']
-    cell_exts = ['xls', 'xlsx', 'ods', 'csv']
-    slide_exts = ['ppt', 'pptx', 'odp']
-    
-    if ext in word_exts:
-        doc_type = 'word'
-    elif ext in cell_exts:
-        doc_type = 'cell'
-    elif ext in slide_exts:
-        doc_type = 'slide'
-    elif ext == 'pdf':
-        doc_type = 'word'
-    else:
-        doc_type = 'word'
-    
-    # API_BASE_URL should be the public URL of the backend (e.g. https://backend.vercel.app)
-    # Fallback to host.docker.internal for local Docker development
-    api_base_url = os.getenv("API_BASE_URL", "http://host.docker.internal:8000")
-    callback_url = f"{api_base_url}/files/onlyoffice/callback"
-    
-    onlyoffice_secret = os.getenv("ONLYOFFICE_JWT_SECRET", "supersecretjwtkeysupersecretjwtkey")
-    
-    # Build the config
-    config = {
-        "document": {
-            "fileType": ext,
-            "key": f"{file_id}-{int(file.created_at.timestamp()) if file.created_at else 0}",
-            "title": file.name,
-            "url": file_url,
-            "permissions": {
-                "comment": True,
-                "download": True,
-                "edit": True,
-                "print": True,
-                "review": True,
-            },
-        },
-        "documentType": doc_type,
-        "editorConfig": {
-            "callbackUrl": callback_url,
-            "mode": "edit",
-            "user": {
-                "id": str(current_user.id),
-                "name": current_user.username,
-            },
-            "lang": "en",
-            "customization": {
-                "autosave": True,
-                "compactHeader": False,
-            },
-        },
-        "height": "100%",
-        "width": "100%",
-        "type": "desktop",
+
+    # If file is not yet in DocSpace, upload it
+    if not file.docspace_id:
+        try:
+            # Download from S3
+            if not file.s3_key:
+                # Create empty file? Or fail?
+                # For now fail if no content
+                raise HTTPException(status_code=400, detail="File content not found")
+                
+            s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=file.s3_key)
+            file_content = s3_response['Body'].read()
+            
+            # Upload to DocSpace
+            # Using "@my" (My Documents) for simplicity
+            result = docspace_client.upload_file(file_content, file.name)
+            
+            # Result structure depends on API. docspace.py returns response.json()
+            # Usually: { "response": { "id": "...", ... } }
+            if "response" in result and "id" in result["response"]:
+                file.docspace_id = str(result["response"]["id"])
+            elif "id" in result: # distinct case
+                 file.docspace_id = str(result["id"])
+            else:
+                 print(f"DocSpace Upload Unexpected Response: {result}")
+                 # Fallback: try to find any ID
+                 pass
+            
+            if file.docspace_id:
+                db.commit()
+                db.refresh(file)
+            else:
+                raise HTTPException(status_code=502, detail="Failed to get DocSpace ID after upload")
+                
+        except Exception as e:
+            print(f"Error uploading to DocSpace: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to initialize editor: {str(e)}")
+
+    return {
+        "docspace_url": DOCSPACE_URL,
+        "file_id": file.docspace_id,
+        "mode": "edit", # User owns file, so edit
+        "file_name": file.name
     }
-    
-    # Sign the entire config with the OnlyOffice JWT secret
-    token = pyjwt.encode(config, onlyoffice_secret, algorithm="HS256")
-    config["token"] = token
-    
-    return config
 
 
 @router.post("/onlyoffice/callback")

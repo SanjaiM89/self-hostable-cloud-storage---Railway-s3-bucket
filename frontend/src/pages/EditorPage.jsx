@@ -1,10 +1,8 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { filesAPI } from '../utils/api';
+import { filesAPI } from '../utils/api'; // Ensure this is correct import
+import api from '../utils/api'; // Fallback
 import { ArrowLeft, Loader2 } from 'lucide-react';
-import api from '../utils/api';
-
-const ONLYOFFICE_URL = import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080';
 
 export default function EditorPage() {
     const { fileId } = useParams();
@@ -12,41 +10,97 @@ export default function EditorPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [fileName, setFileName] = useState('Document');
-    const editorInitialized = useRef(false);
+    const editorInstanceRef = useRef(null);
 
     useEffect(() => {
-        if (editorInitialized.current) return;
+        let mounted = true;
 
-        const initEditor = async () => {
+        const initDocSpaceEditor = (config) => {
+            if (!mounted) return;
             try {
-                // Fetch the JWT-signed editor config from backend
-                const res = await api.get(`/files/editor-config/${fileId}`);
-                const config = res.data;
-                setFileName(config.document?.title || 'Document');
+                // DocSpace SDK initialization
+                // We assume window.DocSpace.SDK is available
+                if (!window.DocSpace || !window.DocSpace.SDK) {
+                    throw new Error("DocSpace SDK not found");
+                }
 
-                // Load OnlyOffice API script
-                const script = document.createElement('script');
-                script.src = `${import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'}/web-apps/apps/api/documents/api.js`;
-                script.onload = () => {
-                    if (window.DocsAPI) {
-                        editorInitialized.current = true;
-                        new window.DocsAPI.DocEditor('onlyoffice-editor', config);
-                        setLoading(false);
+                const frame = window.DocSpace.SDK.initEditor({
+                    url: config.docspace_url,
+                    id: config.file_id,
+                    mode: config.mode || 'edit',
+                    width: "100%",
+                    height: "100%",
+                    events: {
+                        onAppReady: () => console.log('DocSpace Ready'),
+                        onError: (err) => console.error('DocSpace Error:', err),
                     }
-                };
-                script.onerror = () => {
-                    setError('Failed to load OnlyOffice editor. Make sure the OnlyOffice container is running.');
-                    setLoading(false);
-                };
-                document.head.appendChild(script);
+                });
+
+                const container = document.getElementById('onlyoffice-editor');
+                if (container) {
+                    container.innerHTML = ''; // Clear previous
+                    // If frame is node, append. If it's just created in place, good.
+                    // SDK usually returns the iframe or key.
+                    // We'll try appending if it returns a node.
+                    if (frame instanceof Node) {
+                        container.appendChild(frame);
+                    }
+                }
+                editorInstanceRef.current = frame;
+                setLoading(false);
+
             } catch (err) {
-                console.error('Failed to load editor config:', err);
-                setError(err.response?.data?.detail || 'Failed to load editor configuration');
+                console.error("Failed to init DocSpace editor:", err);
+                if (mounted) setError('Failed to initialize DocSpace editor');
                 setLoading(false);
             }
         };
 
-        initEditor();
+        const fetchConfig = async () => {
+            try {
+                // Fetch config from backend
+                // Use filesAPI if available, or api directly
+                const res = await api.get(`/files/editor-config/${fileId}`);
+                const config = res.data; // { docspace_url, file_id, mode, file_name }
+
+                if (mounted) setFileName(config.file_name || 'Document');
+
+                // Load SDK if needed
+                if (window.DocSpace) {
+                    initDocSpaceEditor(config);
+                } else {
+                    const script = document.createElement('script');
+                    // SDK URL
+                    script.src = `${config.docspace_url}/static/scripts/sdk/1.0.0/api.js`;
+                    script.async = true;
+                    script.onload = () => initDocSpaceEditor(config);
+                    script.onerror = () => {
+                        if (mounted) {
+                            setError('Failed to load DocSpace API script');
+                            setLoading(false);
+                        }
+                    };
+                    document.head.appendChild(script);
+                }
+
+            } catch (err) {
+                console.error('Failed to load editor config:', err);
+                if (mounted) {
+                    setError(err.response?.data?.detail || 'Failed to load editor configuration');
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchConfig();
+
+        return () => {
+            mounted = false;
+            // Cleanup? DocSpace SDK doesn't seem to have destroy?
+            // We just clear the container.
+            const container = document.getElementById('onlyoffice-editor');
+            if (container) container.innerHTML = '';
+        };
     }, [fileId]);
 
     if (error) {
@@ -77,7 +131,8 @@ export default function EditorPage() {
                     <Loader2 className="w-4 h-4 text-green-500 animate-spin ml-2" />
                 )}
             </div>
-            <div className="flex-1">
+            <div className="flex-1 overflow-hidden relative">
+                {/* OnlyOffice Container */}
                 <div id="onlyoffice-editor" className="w-full h-full" />
             </div>
         </div>
