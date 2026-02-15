@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
-import { Cloud, Eye, EyeOff, LogIn } from 'lucide-react';
+import { Cloud, Eye, EyeOff, LogIn, ShieldCheck, Zap } from 'lucide-react';
 import api from '../utils/api';
+import AuthBackground3D from '../components/AuthBackground3D';
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
@@ -30,52 +31,60 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="auth-bg relative flex items-center justify-center min-h-screen px-4">
+        <div className="auth-bg relative flex items-center justify-center min-h-screen px-4 py-6">
+            <AuthBackground3D />
             <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.4 }}
-                className="glass-card w-full max-w-[400px] p-8"
+                className="glass-card auth-shell relative z-10 w-full max-w-[440px] p-8"
             >
-                {/* Logo */}
-                <div className="flex flex-col items-center mb-8">
-                    <div className="w-12 h-12 rounded-xl bg-[#a6e3a1] flex items-center justify-center mb-4">
-                        <Cloud className="w-7 h-7 text-[#1e1e2e]" />
+                <div className="auth-card-header">
+                    <div className="w-14 h-14 rounded-2xl bg-[var(--auth-accent)] flex items-center justify-center mb-4 shadow-md">
+                        <Cloud className="w-8 h-8 text-[var(--auth-bg-start)]" />
                     </div>
-                    <h1 className="text-xl font-semibold text-[#cdd6f4]">Welcome back</h1>
-                    <p className="text-[13px] text-[#a6adc8] mt-1">Sign in to your workspace</p>
+                    <h1 className="text-2xl font-semibold text-[var(--auth-title)] tracking-tight">Welcome back</h1>
+                    <p className="text-[13px] text-[var(--auth-muted)] mt-1.5">Sign in to your workspace and continue where you left off.</p>
+
+                    <div className="auth-chip-row mt-4">
+                        <span className="auth-chip"><ShieldCheck className="w-3.5 h-3.5" /> Secure</span>
+                        <span className="auth-chip"><Zap className="w-3.5 h-3.5" /> Fast Sync</span>
+                    </div>
                 </div>
 
                 {error && (
-                    <div className="mb-4 px-3 py-2 rounded-lg bg-[#f38ba8]/10 border border-[#f38ba8]/20 text-[13px] text-[#f38ba8]">
+                    <div className="mb-4 px-3 py-2 rounded-lg bg-[var(--auth-error-bg)] border border-[var(--auth-error-border)] text-[13px] text-[var(--auth-error)]">
                         {error}
                     </div>
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div>
-                        <label className="block text-[12px] font-medium text-[#a6adc8] mb-1.5">Username</label>
+                    <div className="auth-input-group">
+                        <label className="block text-[12px] font-medium text-[var(--auth-muted)] mb-1.5">Username</label>
                         <input
                             type="text"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            className="w-full px-3 py-2.5 rounded-lg bg-[#181825] border border-[#313244] text-[14px] text-[#cdd6f4] placeholder:text-[#6c7086] focus:outline-none focus:border-[#a6e3a1] transition-colors"
+                            className="w-full px-3 py-2.5 rounded-lg bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] text-[14px] text-[var(--auth-title)] placeholder:text-[var(--auth-input-placeholder)] focus:outline-none focus:border-[var(--auth-accent)] transition-colors"
                             placeholder="Enter username"
+                            autoComplete="username"
                             required
                         />
                     </div>
-                    <div>
-                        <label className="block text-[12px] font-medium text-[#a6adc8] mb-1.5">Password</label>
+
+                    <div className="auth-input-group">
+                        <label className="block text-[12px] font-medium text-[var(--auth-muted)] mb-1.5">Password</label>
                         <div className="relative">
                             <input
                                 type={showPassword ? 'text' : 'password'}
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-3 py-2.5 rounded-lg bg-[#181825] border border-[#313244] text-[14px] text-[#cdd6f4] placeholder:text-[#6c7086] focus:outline-none focus:border-[#a6e3a1] transition-colors pr-10"
+                                className="w-full px-3 py-2.5 rounded-lg bg-[var(--auth-input-bg)] border border-[var(--auth-input-border)] text-[14px] text-[var(--auth-title)] placeholder:text-[var(--auth-input-placeholder)] focus:outline-none focus:border-[var(--auth-accent)] transition-colors pr-10"
                                 placeholder="Enter password"
+                                autoComplete="current-password"
                                 required
                             />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6c7086] hover:text-[#a6adc8]">
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--auth-input-placeholder)] hover:text-[var(--auth-muted)]">
                                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                         </div>
@@ -84,10 +93,10 @@ export default function LoginPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[#a6e3a1] hover:bg-[#94e2d5] text-[#1e1e2e] text-[14px] font-semibold transition-colors disabled:opacity-50"
+                        className="auth-submit-btn w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[var(--auth-accent)] hover:bg-[var(--auth-accent-hover)] text-[var(--auth-bg-start)] text-[14px] font-semibold transition-colors disabled:opacity-50"
                     >
                         {loading ? (
-                            <div className="w-4 h-4 border-2 border-[#1e1e2e]/30 border-t-[#1e1e2e] rounded-full animate-spin" />
+                            <div className="w-4 h-4 border-2 border-[var(--auth-spinner-track)] border-t-[var(--auth-bg-start)] rounded-full animate-spin" />
                         ) : (
                             <>
                                 <LogIn className="w-4 h-4" />
@@ -97,9 +106,9 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                <p className="text-center text-[13px] text-[#a6adc8] mt-6">
-                    Don't have an account?{' '}
-                    <Link to="/register" className="text-[#a6e3a1] hover:text-[#94e2d5] font-medium transition-colors">
+                <p className="text-center text-[13px] text-[var(--auth-muted)] mt-6">
+                    Don&apos;t have an account?{' '}
+                    <Link to="/register" className="text-[var(--auth-accent)] hover:text-[var(--auth-accent-hover)] font-medium transition-colors">
                         Create one
                     </Link>
                 </p>

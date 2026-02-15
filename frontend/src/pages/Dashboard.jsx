@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
@@ -20,6 +20,7 @@ export default function Dashboard() {
     const [searchQuery, setSearchQuery] = useState('');
     const [viewMode, setViewMode] = useState('grid');
     const [loading, setLoading] = useState(false);
+    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [activityOpen, setActivityOpen] = useState(false);
     const [activities, setActivities] = useState([]);
@@ -40,8 +41,10 @@ export default function Dashboard() {
         try {
             const res = await filesAPI.list(currentFolder);
             setFiles(res.data || []);
+            setHasLoadedOnce(true);
         } catch (err) {
             console.error('Failed to fetch files:', err);
+            setHasLoadedOnce(true);
         } finally {
             setLoading(false);
         }
@@ -324,14 +327,19 @@ export default function Dashboard() {
     };
 
     // ─── Filtered & sorted files ───
-    const filteredFiles = files.filter((f) =>
-        f.name.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-    const sortedFiles = [...filteredFiles].sort((a, b) => {
-        if (a.is_folder && !b.is_folder) return -1;
-        if (!a.is_folder && b.is_folder) return 1;
-        return new Date(b.created_at) - new Date(a.created_at);
-    });
+    const deferredSearchQuery = useDeferredValue(searchQuery);
+    const sortedFiles = useMemo(() => {
+        const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
+        const filteredFiles = normalizedQuery
+            ? files.filter((file) => file.name.toLowerCase().includes(normalizedQuery))
+            : files;
+
+        return [...filteredFiles].sort((a, b) => {
+            if (a.is_folder && !b.is_folder) return -1;
+            if (!a.is_folder && b.is_folder) return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+    }, [files, deferredSearchQuery]);
 
     return (
         <div className="flex h-screen bg-[var(--bg-primary)] transition-colors duration-200">
@@ -447,10 +455,19 @@ export default function Dashboard() {
                         )}
 
                         {/* File Grid — hidden when editor is open */}
-                        <div className="px-5 py-4" style={{ display: (editingFile || markdownFile) ? 'none' : 'block' }}>
-                            {loading ? (
-                                <div className="flex items-center justify-center py-20">
-                                    <div className="w-6 h-6 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin" />
+                        <div className="px-5 py-4 smooth-panel" style={{ display: (editingFile || markdownFile) ? 'none' : 'block' }}>
+                            {loading && hasLoadedOnce && (
+                                <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
+                                    <span className="w-3.5 h-3.5 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin" />
+                                    Refreshing files...
+                                </div>
+                            )}
+
+                            {!hasLoadedOnce && loading ? (
+                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 py-2">
+                                    {Array.from({ length: 10 }).map((_, i) => (
+                                        <div key={i} className="h-28 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] animate-pulse" />
+                                    ))}
                                 </div>
                             ) : (
                                 <FileGrid
