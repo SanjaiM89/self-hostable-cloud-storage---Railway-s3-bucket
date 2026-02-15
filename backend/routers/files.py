@@ -242,7 +242,10 @@ def get_editor_config(
     current_user: User = Depends(get_current_user)
 ):
     """Generate configuration for DocSpace Editor SDK"""
-    from ..services.docspace import docspace_client, DOCSPACE_URL
+    try:
+        from ..services.docspace import docspace_client, DOCSPACE_URL
+    except ImportError:
+        from services.docspace import docspace_client, DOCSPACE_URL
     import requests
     
     file = db.query(FileModel).filter(

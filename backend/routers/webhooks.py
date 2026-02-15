@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
-from ..database import get_db
-from ..models import File as FileModel
-from ..services.docspace import docspace_client
-from ..storage import upload_file_to_s3, BUCKET_NAME, s3_client
+try:
+    from ..database import get_db
+    from ..models import File as FileModel
+    from ..services.docspace import docspace_client
+    from ..storage import upload_file_to_s3, BUCKET_NAME, s3_client
+except ImportError:
+    from database import get_db
+    from models import File as FileModel
+    from services.docspace import docspace_client
+    from storage import upload_file_to_s3, BUCKET_NAME, s3_client
 import os
 
 router = APIRouter(prefix="/docspace", tags=["docspace"])
