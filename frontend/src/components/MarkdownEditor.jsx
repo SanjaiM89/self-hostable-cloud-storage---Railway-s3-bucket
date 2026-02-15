@@ -6,6 +6,8 @@ import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
+import { common, createLowlight } from 'lowlight';
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { filesAPI } from '../utils/api';
 import {
     ArrowLeft, Save, Upload as UploadIcon,
@@ -13,6 +15,9 @@ import {
     Quote, Code, Image as ImageIcon, Link as LinkIcon,
     Undo, Redo
 } from 'lucide-react';
+
+// Initialize lowlight with common languages
+const lowlight = createLowlight(common);
 
 export default function MarkdownEditor({ file, onClose }) {
     const [originalContent, setOriginalContent] = useState('');
@@ -44,6 +49,10 @@ export default function MarkdownEditor({ file, onClose }) {
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
+                codeBlock: false, // Disable default codeBlock to use lowlight
+            }),
+            CodeBlockLowlight.configure({
+                lowlight,
             }),
             Typography,
             Image,
@@ -54,7 +63,7 @@ export default function MarkdownEditor({ file, onClose }) {
                 placeholder: 'Start writing...',
             }),
             Markdown.configure({
-                html: false, // Force markdown output
+                html: false,
                 transformPastedText: true,
                 transformCopiedText: true,
             }),
@@ -151,7 +160,6 @@ export default function MarkdownEditor({ file, onClose }) {
                 const res = await filesAPI.getContent(file.id);
                 const content = res.data.content || '';
                 setOriginalContent(content);
-                // Load markdown into editor
                 if (editor) {
                     editor.commands.setContent(content);
                 }
@@ -162,16 +170,13 @@ export default function MarkdownEditor({ file, onClose }) {
             }
         };
         loadContent();
-    }, [file.id, editor]); // Editor dependency ensures we load only after Tiptap is ready
+    }, [file.id, editor]);
 
     // Save before closing
     const handleClose = useCallback(async () => {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
         if (editor) {
             const currentMarkdown = editor.storage.markdown.getMarkdown();
-            // Compare normalized strings/check if meaningful change? 
-            // Tiptap's markdown serializer might produce slightly different output than input.
-            // For safety, just save if unsaved status.
             if (saveStatus === 'unsaved') {
                 await saveContent(currentMarkdown);
             }
@@ -205,10 +210,6 @@ export default function MarkdownEditor({ file, onClose }) {
     };
     const badge = badgeStyle[saveStatus] || badgeStyle.saved;
 
-    if (!editor) {
-        return null;
-    }
-
     if (loading) {
         return (
             <div style={{
@@ -221,6 +222,10 @@ export default function MarkdownEditor({ file, onClose }) {
                 </div>
             </div>
         );
+    }
+
+    if (!editor) {
+        return null;
     }
 
     return (
@@ -347,28 +352,45 @@ export default function MarkdownEditor({ file, onClose }) {
                     color: var(--text-secondary);
                 }
                 
+                /* Boxed Code Blocks */
                 .ProseMirror pre { 
                     background: #1e1e2e; 
-                    color: #e2e8f0; 
-                    padding: 0.75rem 1rem; 
+                    color: #cdd6f4;
+                    padding: 1rem; 
                     border-radius: 0.5rem; 
-                    font-family: 'JetBrains Mono', monospace; 
+                    font-family: 'JetBrains Mono', 'Fira Code', monospace; 
                     font-size: 0.9em;
                     overflow-x: auto;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    margin: 1.5em 0;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
                 }
+                
                 .ProseMirror code { 
                     background: rgba(255,255,255,0.1); 
-                    color: #ff79c6; 
+                    color: #f5c2e7; 
                     padding: 0.2rem 0.4rem; 
                     border-radius: 0.25rem; 
                     font-family: monospace; 
                     font-size: 0.9em;
                 }
+                
                 .ProseMirror pre code { 
                     background: none; 
                     color: inherit; 
                     padding: 0; 
+                    font-size: inherit;
                 }
+                
+                /* Syntax Highlighting Colors (Catppuccin Macchiato inspired) */
+                .hljs-comment, .hljs-quote { color: #6c7086; font-style: italic; }
+                .hljs-variable, .hljs-template-variable, .hljs-attribute, .hljs-tag, .hljs-name, .hljs-regexp, .hljs-link, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: #f38ba8; }
+                .hljs-number, .hljs-meta, .hljs-built_in, .hljs-builtin-name, .hljs-literal, .hljs-type, .hljs-params { color: #fab387; }
+                .hljs-string, .hljs-symbol, .hljs-bullet { color: #a6e3a1; }
+                .hljs-title, .hljs-section { color: #89b4fa; }
+                .hljs-keyword, .hljs-selector-tag { color: #cba6f7; }
+                .hljs-emphasis { font-style: italic; }
+                .hljs-strong { font-weight: bold; }
 
                 .ProseMirror img {
                     border-radius: 8px;

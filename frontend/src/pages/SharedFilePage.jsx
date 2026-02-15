@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Download, File, Lock } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
+import MarkdownViewer from '../components/MarkdownViewer';
 
 export default function SharedFilePage() {
     const { token } = useParams();
@@ -134,6 +135,11 @@ export default function SharedFilePage() {
                 <div ref={editorContainerRef} className="flex-1" />
             </div>
         );
+    }
+
+    // If markdown file, show MarkdownViewer
+    if (fileInfo && fileInfo.name.endsWith('.md')) {
+        return <MarkdownViewer token={token} fileInfo={fileInfo} />;
     }
 
     // Non-editable file: show file card with download

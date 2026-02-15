@@ -99,6 +99,7 @@ export const sharesAPI = {
     publicInfo: (token) => axios.get(`${API_URL}/shares/public/${token}`),
     publicDownload: (token) => axios.get(`${API_URL}/shares/public/${token}/download`),
     publicEditorConfig: (token) => axios.get(`${API_URL}/shares/public/${token}/editor-config`),
+    publicContent: (token) => axios.get(`${API_URL}/shares/public/${token}/content`),
 };
 
 export default api;
