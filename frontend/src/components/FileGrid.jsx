@@ -255,10 +255,10 @@ function FileCard({ file, onOpen, onContextMenu, index, selected, onClickItem })
             >
                 <div className="h-[170px] flex items-center justify-center bg-[var(--bg-secondary)]">
                     {file.is_folder ? (
-                        <Icon className="w-14 h-14" style={{ color }} strokeWidth={1.5} />
+                        <Icon className="w-14 h-14 app-icon-solid" style={{ color }} strokeWidth={1.5} />
                     ) : (
                         <div className="w-[78%] h-[88%] rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-center">
-                            <Icon className="w-10 h-10" style={{ color }} strokeWidth={1.5} />
+                            <Icon className="w-10 h-10 app-icon-solid" style={{ color }} strokeWidth={1.5} />
                         </div>
                     )}
                 </div>
@@ -272,7 +272,7 @@ function FileCard({ file, onOpen, onContextMenu, index, selected, onClickItem })
                     onClick={(e) => { e.stopPropagation(); onContextMenu(e, file); }}
                     className="absolute top-2 right-2 p-1 rounded-md bg-[var(--card-bg)]/80 backdrop-blur opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
                 >
-                    <MoreVertical className="w-4 h-4" />
+                    <MoreVertical className="w-4 h-4 app-icon-solid" />
                 </button>
             </motion.div>
 
@@ -297,7 +297,7 @@ function FileRow({ file, onOpen, onContextMenu, index, selected, onClickItem }) 
             onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
         >
             <div className="w-8 h-8 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0">
-                <Icon className="w-4 h-4" style={{ color }} strokeWidth={1.5} />
+                <Icon className="w-4 h-4 app-icon-solid" style={{ color }} strokeWidth={1.5} />
             </div>
             <span className="flex-1 text-[13px] text-[var(--text-primary)] truncate font-medium">{file.name}</span>
             <span className="hidden sm:block text-[12px] text-[var(--text-tertiary)] w-[80px] text-right">{file.is_folder ? '—' : formatSize(file.size)}</span>
@@ -306,7 +306,7 @@ function FileRow({ file, onOpen, onContextMenu, index, selected, onClickItem }) 
                 onClick={(e) => { e.stopPropagation(); onContextMenu(e, file); }}
                 className="p-1 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
             >
-                <MoreVertical className="w-4 h-4" />
+                <MoreVertical className="w-4 h-4 app-icon-solid" />
             </button>
         </motion.div>
     );

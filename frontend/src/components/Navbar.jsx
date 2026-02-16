@@ -50,7 +50,7 @@ export default function Navbar({
                     onClick={onBack}
                     className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors mr-1"
                 >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ArrowLeft className="w-4 h-4 app-icon-solid" />
                 </button>
             )}
 
@@ -69,7 +69,7 @@ export default function Navbar({
                         >
                             {i === 0 ? (
                                 <span className="flex items-center gap-1.5">
-                                    <Home className="w-3.5 h-3.5" />
+                                    <Home className="w-3.5 h-3.5 app-icon-solid" />
                                     {crumb.name}
                                 </span>
                             ) : crumb.name}
@@ -87,7 +87,7 @@ export default function Navbar({
                         onClick={onOpenSearch}
                         className="w-full flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[13px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
                     >
-                        <Search className="w-3.5 h-3.5" />
+                        <Search className="w-3.5 h-3.5 app-icon-solid" />
                         <span className="text-[13px] font-normal">Search anything...</span>
                     </button>
                 </div>
@@ -100,13 +100,13 @@ export default function Navbar({
                         onClick={() => onViewModeChange('grid')}
                         className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}
                     >
-                        <Grid3x3 className="w-3.5 h-3.5" />
+                        <Grid3x3 className="w-3.5 h-3.5 app-icon-solid" />
                     </button>
                     <button
                         onClick={() => onViewModeChange('list')}
                         className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}
                     >
-                        <List className="w-3.5 h-3.5" />
+                        <List className="w-3.5 h-3.5 app-icon-solid" />
                     </button>
                 </div>
             )}
@@ -122,7 +122,7 @@ export default function Navbar({
                         className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-xl transition-colors border border-[var(--border-color)]"
                         title="Upload Folder"
                     >
-                        <FolderUp className="w-3.5 h-3.5" />
+                        <FolderUp className="w-3.5 h-3.5 app-icon-solid" />
                         <span className="hidden sm:inline">Folder</span>
                     </button>
 
@@ -130,7 +130,7 @@ export default function Navbar({
                         onClick={() => fileInputRef.current?.click()}
                         className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-[13px] font-medium rounded-xl transition-colors"
                     >
-                        <Upload className="w-3.5 h-3.5" />
+                        <Upload className="w-3.5 h-3.5 app-icon-solid" />
                         Upload
                     </button>
                 </>
@@ -142,7 +142,7 @@ export default function Navbar({
                 className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
                 title="Activity"
             >
-                <Activity className="w-4 h-4" />
+                <Activity className="w-4 h-4 app-icon-solid" />
             </button>
 
             {/* Theme toggle */}
@@ -150,7 +150,7 @@ export default function Navbar({
                 onClick={toggleTheme}
                 className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
             >
-                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {isDark ? <Sun className="w-4 h-4 app-icon-solid" /> : <Moon className="w-4 h-4 app-icon-solid" />}
             </button>
 
         </header>

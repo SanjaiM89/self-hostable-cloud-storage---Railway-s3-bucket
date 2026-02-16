@@ -511,3 +511,17 @@ body {
 .sidebar-resize-handle:hover {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
+
+
+/* Filled icon treatment to avoid skeleton-only look */
+.app-icon-solid {
+  fill: currentColor;
+  stroke-width: 1.9 !important;
+}
+
+/* Keep chevrons readable while filled */
+.app-icon-solid.lucide-chevron-right,
+.app-icon-solid.lucide-chevron-left {
+  fill: transparent;
+  stroke-width: 2.25 !important;
+}

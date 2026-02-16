@@ -44,7 +44,7 @@ export function Folder({ element, value, level = 0, children }) {
         onClick={() => { setSelectedId(value); toggle(value); }}
       >
         <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth={2.4} />
-        {open ? <FolderOpen className="w-4 h-4 text-[var(--sidebar-accent)]" strokeWidth={2.4} /> : <FolderIcon className="w-4 h-4" strokeWidth={2.4} />}
+        {open ? <FolderOpen className="w-4 h-4 text-[var(--sidebar-accent)]" strokeWidth={2.4} /> : <FolderIcon className="w-4 h-4 app-icon-solid" strokeWidth={2.4} />}
         <span className="flex-1 min-w-0 truncate text-left whitespace-nowrap">{element}</span>
       </button>
       {open && <div>{children}</div>}
@@ -61,7 +61,7 @@ export function File({ value, level = 0, label }) {
       style={{ paddingLeft: `${8 + level * 16 + 18}px` }}
       onClick={() => setSelectedId(value)}
     >
-      <FileIcon className="w-3.5 h-3.5" strokeWidth={2.3} />
+      <FileIcon className="w-3.5 h-3.5 app-icon-solid" strokeWidth={2.3} />
       <span className="flex-1 min-w-0 truncate text-left whitespace-nowrap">{label}</span>
     </button>
   );
