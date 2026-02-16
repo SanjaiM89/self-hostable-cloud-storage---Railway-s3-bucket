@@ -19,6 +19,24 @@ import {
 // Initialize lowlight with common languages
 const lowlight = createLowlight(common);
 
+const CustomImage = Image.extend({
+    addAttributes() {
+        return {
+            ...this.parent?.(),
+            width: {
+                default: null,
+                renderHTML: attributes => {
+                    if (!attributes.width) return {};
+                    return {
+                        width: attributes.width,
+                        style: `width: ${attributes.width}`,
+                    };
+                },
+            },
+        };
+    },
+});
+
 export default function MarkdownEditor({ file, onClose }) {
     const [originalContent, setOriginalContent] = useState('');
     const [saveStatus, setSaveStatus] = useState('saved');
