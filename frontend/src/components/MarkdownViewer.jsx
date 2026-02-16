@@ -9,8 +9,17 @@ import { common, createLowlight } from 'lowlight';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { sharesAPI } from '../utils/api';
 import { File } from 'lucide-react';
+import Loader from './Loader';
 
 const lowlight = createLowlight(common);
+const FONT_SIZE_META_RE = /<!--\s*md-font-size:(\d+)\s*-->/;
+
+function parseMarkdownMeta(markdown = '') {
+    const match = markdown.match(FONT_SIZE_META_RE);
+    const size = match ? Number(match[1]) : null;
+    const clean = markdown.replace(FONT_SIZE_META_RE, '').trimStart();
+    return { cleanContent: clean, fontSize: Number.isFinite(size) ? size : 18 };
+}
 
 // Custom Image Extension with Width Support (Read-Only)
 const CustomImage = Image.extend({
@@ -35,6 +44,7 @@ export default function MarkdownViewer({ token, fileInfo }) {
     const [content, setContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
+    const [fontSize, setFontSize] = useState(18);
 
     // Tiptap Editor Setup (Read-Only)
     const editor = useEditor({
@@ -69,9 +79,11 @@ export default function MarkdownViewer({ token, fileInfo }) {
                 setLoading(true);
                 const res = await sharesAPI.publicContent(token);
                 const text = res.data.content || '';
-                setContent(text);
+                const { cleanContent, fontSize: parsedSize } = parseMarkdownMeta(text);
+                setFontSize(parsedSize);
+                setContent(cleanContent);
                 if (editor) {
-                    editor.commands.setContent(text);
+                    editor.commands.setContent(cleanContent);
                 }
             } catch (err) {
                 console.error('Failed to load markdown:', err);
@@ -86,7 +98,7 @@ export default function MarkdownViewer({ token, fileInfo }) {
     if (loading) {
         return (
             <div className="flex items-center justify-center p-12 text-[var(--text-secondary)]">
-                <div className="w-6 h-6 border-2 border-[var(--accent)] rounded-full animate-spin mr-3" />
+                <Loader className="scale-50 mr-2" />
                 Loading content...
             </div>
         );
@@ -101,7 +113,7 @@ export default function MarkdownViewer({ token, fileInfo }) {
     }
 
     return (
-        <div className="h-full flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] font-['Inter']">
+        <div className="h-full flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)] font-['Inter']" style={{ '--md-font-size': `${fontSize}px` }}>
             {/* Header */}
             <div className="h-14 flex items-center px-6 border-b border-[var(--border-color)] bg-[var(--card-bg)] shrink-0">
                 <File className="w-5 h-5 text-[var(--accent)] mr-3" />
@@ -126,7 +138,7 @@ export default function MarkdownViewer({ token, fileInfo }) {
                 /* Tiptap Viewer Styles (Same as Editor but read-only) */
                 .ProseMirror {
                     color: var(--text-primary);
-                    font-size: 1.1rem;
+                    font-size: var(--md-font-size, 18px);
                     line-height: 1.75;
                 }
                 .ProseMirror p { margin-bottom: 1.25em; }

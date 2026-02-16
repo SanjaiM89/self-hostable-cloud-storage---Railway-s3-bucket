@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { Download, File, Lock } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
 import MarkdownViewer from '../components/MarkdownViewer';
+import Loader from '../components/Loader';
 
 export default function SharedFilePage() {
     const { token } = useParams();
@@ -90,7 +91,7 @@ export default function SharedFilePage() {
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
-                <div className="w-8 h-8 border-3 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin" />
+                <Loader className="scale-75" />
             </div>
         );
     }

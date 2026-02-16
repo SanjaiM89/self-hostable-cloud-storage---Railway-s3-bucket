@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
-import { common, createLowlight } from 'lowlight';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+// import { common, createLowlight } from 'lowlight';
+// import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { filesAPI } from '../utils/api';
+import Loader from './Loader';
 import {
     ArrowLeft, Save, Upload as UploadIcon,
     Bold, Italic, Heading1, Heading2, List, ListOrdered,
@@ -17,7 +17,25 @@ import {
 } from 'lucide-react';
 
 // Initialize lowlight with common languages
-const lowlight = createLowlight(common);
+// Initialize lowlight with common languages - MOVED INSIDE COMPONENT TO AVOID REFERENCE_ERROR
+// const lowlight = createLowlight(common);
+
+const FONT_SIZE_STORAGE_KEY = 'md_font_size_preference_v1';
+const PENDING_UPLOAD_STORAGE_KEY = 'md_pending_uploads_v1';
+const FONT_SIZE_META_RE = /<!--\s*md-font-size:(\d+)\s*-->/;
+
+function parseMarkdownMeta(markdown = '') {
+    const match = markdown.match(FONT_SIZE_META_RE);
+    const size = match ? Number(match[1]) : null;
+    const clean = markdown.replace(FONT_SIZE_META_RE, '').trimStart();
+    return { cleanContent: clean, fontSize: Number.isFinite(size) ? size : null };
+}
+
+function withMarkdownMeta(markdown = '', fontSize = 18) {
+    const clean = markdown.replace(FONT_SIZE_META_RE, '').trimStart();
+    return `<!-- md-font-size:${fontSize} -->\n${clean}`;
+}
+
 
 const CustomImage = Image.extend({
     addAttributes() {
@@ -33,6 +51,11 @@ const CustomImage = Image.extend({
                     };
                 },
             },
+            uploadId: {
+                default: null,
+                parseHTML: element => element.getAttribute('data-upload-id'),
+                renderHTML: attributes => attributes.uploadId ? { 'data-upload-id': attributes.uploadId } : {},
+            },
         };
     },
 });
@@ -41,7 +64,75 @@ export default function MarkdownEditor({ file, onClose }) {
     const [originalContent, setOriginalContent] = useState('');
     const [saveStatus, setSaveStatus] = useState('saved');
     const [loading, setLoading] = useState(true);
+    const [fontSize, setFontSize] = useState(() => {
+        const saved = Number(localStorage.getItem(FONT_SIZE_STORAGE_KEY));
+        return Number.isFinite(saved) && saved >= 14 && saved <= 26 ? saved : 18;
+    });
+    const pendingUploadsRef = useRef({});
     const saveTimerRef = useRef(null);
+
+    const persistPendingUploads = useCallback(() => {
+        localStorage.setItem(PENDING_UPLOAD_STORAGE_KEY, JSON.stringify(Object.values(pendingUploadsRef.current)));
+    }, []);
+
+    const fileToDataUrl = useCallback((imgFile) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(imgFile);
+    }), []);
+
+    const replaceUploadedImage = useCallback((uploadId, remoteUrl) => {
+        if (!editor) return;
+        let tr = editor.state.tr;
+        let changed = false;
+        editor.state.doc.descendants((node, pos) => {
+            if (node.type.name === 'image' && node.attrs.uploadId === uploadId) {
+                tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: remoteUrl, uploadId: null });
+                changed = true;
+            }
+        });
+        if (changed) {
+            editor.view.dispatch(tr);
+        }
+    }, [editor]);
+
+    const enqueueImageUpload = useCallback(async (imgFile, insertAtPos = null) => {
+        if (!editor || !imgFile) return;
+        const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const previewSrc = await fileToDataUrl(imgFile);
+
+        const imageAttrs = { src: previewSrc, alt: imgFile.name || 'Pasted Image', uploadId };
+        if (insertAtPos === null) {
+            editor.chain().focus().setImage(imageAttrs).run();
+        } else {
+            const node = editor.state.schema.nodes.image.create(imageAttrs);
+            const tr = editor.state.tr.insert(insertAtPos, node);
+            editor.view.dispatch(tr);
+        }
+
+        pendingUploadsRef.current[uploadId] = {
+            id: uploadId,
+            name: imgFile.name || 'image',
+            type: imgFile.type || 'image/*',
+            size: imgFile.size || 0,
+            createdAt: Date.now(),
+        };
+        persistPendingUploads();
+
+        uploadImage(imgFile).then((remoteUrl) => {
+            if (remoteUrl) {
+                replaceUploadedImage(uploadId, remoteUrl);
+                setSaveStatus('unsaved');
+                const markdown = editor.storage.markdown.getMarkdown();
+                if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                saveTimerRef.current = setTimeout(() => saveContent(markdown), 700);
+            }
+        }).finally(() => {
+            delete pendingUploadsRef.current[uploadId];
+            persistPendingUploads();
+        });
+    }, [editor, fileToDataUrl, persistPendingUploads, replaceUploadedImage]);
 
     // Image upload helper
     const uploadImage = useCallback(async (file) => {
@@ -63,23 +154,23 @@ export default function MarkdownEditor({ file, onClose }) {
     }, []);
 
     // Tiptap Editor Setup
+    // Initialize lowlight safely prevents ReferenceError
+    // const lowlightExtension = useMemo(() => {
+    //     const ll = createLowlight(common);
+    //     return CodeBlockLowlight.configure({ lowlight: ll });
+    // }, []);
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
-                codeBlock: false, // Disable default codeBlock to use lowlight
+                codeBlock: true, // Enable default codeBlock
             }),
-            CodeBlockLowlight.configure({
-                lowlight,
-            }),
+            // lowlightExtension,
             Typography,
             CustomImage.configure({
                 inline: true,
                 allowBase64: true,
-            }),
-            Link.configure({
-                openOnClick: false,
-                autolink: true,
             }),
             Placeholder.configure({
                 placeholder: 'Start writing...',
@@ -103,15 +194,8 @@ export default function MarkdownEditor({ file, onClose }) {
                     const file = event.dataTransfer.files[0];
                     if (file.type.startsWith('image/')) {
                         event.preventDefault();
-                        uploadImage(file).then(url => {
-                            if (url) {
-                                const { schema } = view.state;
-                                const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
-                                const node = schema.nodes.image.create({ src: url, alt: file.name });
-                                const transaction = view.state.tr.insert(coordinates.pos, node);
-                                view.dispatch(transaction);
-                            }
-                        });
+                        const coordinates = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                        enqueueImageUpload(file, coordinates?.pos ?? null);
                         return true;
                     }
                 }
@@ -124,14 +208,7 @@ export default function MarkdownEditor({ file, onClose }) {
                         if (item.type.indexOf('image') !== -1) {
                             event.preventDefault();
                             const file = item.getAsFile();
-                            uploadImage(file).then(url => {
-                                if (url) {
-                                    const { schema } = view.state;
-                                    const node = schema.nodes.image.create({ src: url, alt: file.name || 'Pasted Image' });
-                                    const transaction = view.state.tr.replaceSelectionWith(node);
-                                    view.dispatch(transaction);
-                                }
-                            });
+                            enqueueImageUpload(file);
                             return true;
                         }
                     }
@@ -153,14 +230,22 @@ export default function MarkdownEditor({ file, onClose }) {
     const saveContent = useCallback(async (text) => {
         setSaveStatus('saving');
         try {
-            await filesAPI.saveContent(file.id, text);
+            const contentWithMeta = withMarkdownMeta(text, fontSize);
+
+            // Optimistic update to SessionStorage
+            try {
+                sessionStorage.setItem(`file_content_${file.id}`, contentWithMeta);
+            } catch (e) { /* ignore quota */ }
+
+            await filesAPI.saveContent(file.id, contentWithMeta);
+            localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
             setSaveStatus('saved');
-            setOriginalContent(text);
+            setOriginalContent(contentWithMeta);
         } catch (err) {
             console.error('Save failed:', err);
             setSaveStatus('error');
         }
-    }, [file.id]);
+    }, [file.id, fontSize]);
 
     // Save on Ctrl+S
     useEffect(() => {
@@ -183,11 +268,41 @@ export default function MarkdownEditor({ file, onClose }) {
         const loadContent = async () => {
             try {
                 setLoading(true);
+
+                // Try SessionStorage first
+                const cached = sessionStorage.getItem(`file_content_${file.id}`);
+                if (cached) {
+                    const { cleanContent, fontSize: metaFontSize } = parseMarkdownMeta(cached);
+                    if (metaFontSize) {
+                        setFontSize(metaFontSize);
+                    }
+                    setOriginalContent(cached);
+                    if (editor) editor.commands.setContent(cleanContent);
+                    setLoading(false); // Valid to show immediately
+                }
+
+                // Stale-while-revalidate pattern
                 const res = await filesAPI.getContent(file.id);
                 const content = res.data.content || '';
-                setOriginalContent(content);
-                if (editor) {
-                    editor.commands.setContent(content);
+
+                // Only update if different (or if we didn't have cache)
+                if (content !== cached) {
+                    const { cleanContent, fontSize: metaFontSize } = parseMarkdownMeta(content);
+                    if (metaFontSize) {
+                        setFontSize(metaFontSize);
+                        localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(metaFontSize));
+                    }
+                    setOriginalContent(content);
+                    if (editor) {
+                        // Only update editor if user hasn't started typing yet? 
+                        // For now, simplicity: update it (might lose 100ms of typing if very unlucky race)
+                        // Better: check if editor is empty or same as cache
+                        const current = editor.storage.markdown.getMarkdown();
+                        if (!cached || current === parseMarkdownMeta(cached).cleanContent) {
+                            editor.commands.setContent(cleanContent);
+                        }
+                    }
+                    sessionStorage.setItem(`file_content_${file.id}`, content);
                 }
             } catch (err) {
                 console.error('Failed to load markdown:', err);
@@ -218,14 +333,11 @@ export default function MarkdownEditor({ file, onClose }) {
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (file) {
-                const url = await uploadImage(file);
-                if (url && editor) {
-                    editor.chain().focus().setImage({ src: url, alt: file.name }).run();
-                }
+                await enqueueImageUpload(file);
             }
         };
         input.click();
-    }, [editor, uploadImage]);
+    }, [enqueueImageUpload]);
 
     // Badge styles
     const badgeStyle = {
@@ -243,7 +355,7 @@ export default function MarkdownEditor({ file, onClose }) {
                 background: 'var(--bg-primary)', color: 'var(--text-secondary)',
             }}>
                 <div style={{ textAlign: 'center' }}>
-                    <div className="w-8 h-8 border-2 border-t-[var(--accent)] rounded-full animate-spin mx-auto mb-2" />
+                    <div className="mx-auto mb-2 flex justify-center"><Loader className="scale-50" /></div>
                     Loading content...
                 </div>
             </div>
@@ -259,6 +371,7 @@ export default function MarkdownEditor({ file, onClose }) {
             height: '100%', display: 'flex', flexDirection: 'column',
             background: 'var(--bg-primary)', color: 'var(--text-primary)',
             fontFamily: "'Inter', -apple-system, sans-serif",
+            '--md-font-size': `${fontSize}px`,
         }}>
             {/* Toolbar */}
             <div style={{
@@ -333,6 +446,25 @@ export default function MarkdownEditor({ file, onClose }) {
                     title="Insert Image"
                 />
 
+                <div className="h-4 w-px bg-[var(--border-color)] mx-1" />
+                <label className="text-xs text-[var(--text-secondary)]">Text size</label>
+                <select
+                    value={fontSize}
+                    onChange={(e) => {
+                        const next = Number(e.target.value);
+                        setFontSize(next);
+                        localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next));
+                        if (editor) {
+                            const markdown = editor.storage.markdown.getMarkdown();
+                            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                            saveTimerRef.current = setTimeout(() => saveContent(markdown), 400);
+                        }
+                    }}
+                    className="h-8 px-2 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs"
+                >
+                    {[14, 16, 18, 20, 22, 24].map((size) => (<option key={size} value={size}>{size}px</option>))}
+                </select>
+
                 <div className="flex-1" />
 
                 {/* Save Status Badge */}
@@ -358,7 +490,7 @@ export default function MarkdownEditor({ file, onClose }) {
                 /* Tiptap Editor Styles */
                 .ProseMirror {
                     color: var(--text-primary);
-                    font-size: 1.1rem;
+                    font-size: var(--md-font-size, 18px);
                     line-height: 1.75;
                 }
                 .ProseMirror p { margin-bottom: 1.25em; }

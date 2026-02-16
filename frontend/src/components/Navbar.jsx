@@ -1,9 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import {
     Search, Grid3x3, List, Upload, FolderUp, Sun, Moon, ChevronRight,
-    LogOut, Home, Activity, ArrowLeft
+    Home, Activity, ArrowLeft
 } from 'lucide-react';
 
 export default function Navbar({
@@ -18,9 +17,9 @@ export default function Navbar({
     onToggleActivity,
     showBackButton,
     onBack,
+    onOpenSearch,
 }) {
     const { isDark, toggleTheme } = useTheme();
-    const { user, logout } = useAuth();
     const fileInputRef = useRef(null);
     const folderInputRef = useRef(null);
 
@@ -44,14 +43,14 @@ export default function Navbar({
     };
 
     return (
-        <header className="flex items-center md:h-[52px] px-3 md:px-4 py-2 md:py-0 gap-2 md:gap-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] sticky top-0 z-20 backdrop-blur-sm flex-shrink-0 flex-wrap md:flex-nowrap">
+        <header className="flex items-center md:h-[58px] px-3 md:px-5 py-2 md:py-0 gap-2 md:gap-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] sticky top-0 z-20 backdrop-blur-sm flex-shrink-0 flex-wrap md:flex-nowrap">
             {/* Back button for editor */}
             {showBackButton && (
                 <button
                     onClick={onBack}
                     className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors mr-1"
                 >
-                    <ArrowLeft className="w-4 h-4" />
+                    <ArrowLeft className="w-4 h-4 app-icon-solid" />
                 </button>
             )}
 
@@ -70,7 +69,7 @@ export default function Navbar({
                         >
                             {i === 0 ? (
                                 <span className="flex items-center gap-1.5">
-                                    <Home className="w-3.5 h-3.5" />
+                                    <Home className="w-3.5 h-3.5 app-icon-solid" />
                                     {crumb.name}
                                 </span>
                             ) : crumb.name}
@@ -83,15 +82,14 @@ export default function Navbar({
 
             {/* Search */}
             {!showBackButton && (
-                <div className="relative w-full md:max-w-[240px] order-last md:order-none">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                    <input
-                        type="text"
-                        placeholder="Search files..."
-                        value={searchQuery}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
-                    />
+                <div className="relative w-full md:max-w-[430px] order-last md:order-none">
+                    <button
+                        onClick={onOpenSearch}
+                        className="w-full flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[13px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                        <Search className="w-3.5 h-3.5 app-icon-solid" />
+                        <span className="text-[13px] font-normal">Search anything...</span>
+                    </button>
                 </div>
             )}
 
@@ -102,13 +100,13 @@ export default function Navbar({
                         onClick={() => onViewModeChange('grid')}
                         className={`p-1.5 transition-colors ${viewMode === 'grid' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}
                     >
-                        <Grid3x3 className="w-3.5 h-3.5" />
+                        <Grid3x3 className="w-3.5 h-3.5 app-icon-solid" />
                     </button>
                     <button
                         onClick={() => onViewModeChange('list')}
                         className={`p-1.5 transition-colors ${viewMode === 'list' ? 'bg-[var(--bg-secondary)] text-[var(--text-primary)]' : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)]'}`}
                     >
-                        <List className="w-3.5 h-3.5" />
+                        <List className="w-3.5 h-3.5 app-icon-solid" />
                     </button>
                 </div>
             )}
@@ -121,18 +119,18 @@ export default function Navbar({
 
                     <button
                         onClick={() => folderInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-lg transition-colors border border-[var(--border-color)]"
+                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-xl transition-colors border border-[var(--border-color)]"
                         title="Upload Folder"
                     >
-                        <FolderUp className="w-3.5 h-3.5" />
+                        <FolderUp className="w-3.5 h-3.5 app-icon-solid" />
                         <span className="hidden sm:inline">Folder</span>
                     </button>
 
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-[13px] font-medium rounded-lg transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-[13px] font-medium rounded-xl transition-colors"
                     >
-                        <Upload className="w-3.5 h-3.5" />
+                        <Upload className="w-3.5 h-3.5 app-icon-solid" />
                         Upload
                     </button>
                 </>
@@ -144,7 +142,7 @@ export default function Navbar({
                 className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
                 title="Activity"
             >
-                <Activity className="w-4 h-4" />
+                <Activity className="w-4 h-4 app-icon-solid" />
             </button>
 
             {/* Theme toggle */}
@@ -152,22 +150,9 @@ export default function Navbar({
                 onClick={toggleTheme}
                 className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
             >
-                {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                {isDark ? <Sun className="w-4 h-4 app-icon-solid" /> : <Moon className="w-4 h-4 app-icon-solid" />}
             </button>
 
-            {/* User avatar / Logout */}
-            <div className="flex items-center gap-1.5 md:gap-2">
-                <div className="w-7 h-7 rounded-full bg-[var(--accent)] flex items-center justify-center text-white text-[12px] font-semibold">
-                    {user?.username?.[0]?.toUpperCase() || 'U'}
-                </div>
-                <button
-                    onClick={logout}
-                    className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-[var(--bg-secondary)] transition-colors"
-                    title="Logout"
-                >
-                    <LogOut className="w-4 h-4" />
-                </button>
-            </div>
         </header>
     );
 }

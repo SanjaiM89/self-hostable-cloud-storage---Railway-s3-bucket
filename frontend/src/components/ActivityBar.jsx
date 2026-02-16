@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Download, Archive, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Upload, Download, Archive, CheckCircle2, AlertCircle } from 'lucide-react';
+import Loader from './Loader';
 
 const iconMap = {
     upload: Upload,
@@ -55,7 +56,7 @@ export default function ActivityBar({ activities = [], open, onClose }) {
                                         >
                                             <div className={`mt-0.5 ${statusColors[a.status] || ''}`}>
                                                 {a.status === 'running' ? (
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    <Loader className="scale-[0.35]" />
                                                 ) : a.status === 'done' ? (
                                                     <CheckCircle2 className="w-4 h-4" />
                                                 ) : a.status === 'error' ? (

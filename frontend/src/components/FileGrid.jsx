@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { filesAPI } from '../utils/api';
 import ShareModal from './ShareModal';
+import InputModal from './InputModal';
 
 const getFileIcon = (file) => {
     if (file.is_folder) return { icon: Folder, color: '#a6e3a1' };
@@ -117,65 +118,7 @@ function ContextMenu({ x, y, items, onClose }) {
     );
 }
 
-/* ─── Inline Input Modal ─── */
-function InputModal({ title, placeholder, defaultValue, onConfirm, onCancel }) {
-    const [value, setValue] = useState(defaultValue || '');
-    const inputRef = useRef(null);
 
-    useEffect(() => {
-        // Auto-focus and select all text
-        if (inputRef.current) {
-            inputRef.current.focus();
-            inputRef.current.select();
-        }
-    }, []);
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (value.trim()) onConfirm(value.trim());
-    };
-
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center" onClick={onCancel}>
-            {/* Backdrop */}
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" />
-            {/* Dialog */}
-            <div
-                className="relative z-10 w-[380px] rounded-xl border border-[var(--border-color)] bg-[var(--card-bg)] shadow-2xl overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="px-5 pt-5 pb-3">
-                    <h3 className="text-[15px] font-semibold text-[var(--text-primary)] mb-3">{title}</h3>
-                    <form onSubmit={handleSubmit}>
-                        <input
-                            ref={inputRef}
-                            type="text"
-                            value={value}
-                            onChange={(e) => setValue(e.target.value)}
-                            placeholder={placeholder || 'Enter a name...'}
-                            className="w-full px-3 py-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
-                            onKeyDown={(e) => { if (e.key === 'Escape') onCancel(); }}
-                        />
-                    </form>
-                </div>
-                <div className="flex justify-end gap-2 px-5 py-3 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]/50">
-                    <button
-                        onClick={onCancel}
-                        className="px-4 py-1.5 rounded-lg text-[13px] text-[var(--text-secondary)] hover:bg-[var(--card-hover)] transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={() => { if (value.trim()) onConfirm(value.trim()); }}
-                        className="px-4 py-1.5 rounded-lg text-[13px] font-medium bg-[var(--accent)] text-[#1e1e2e] hover:brightness-110 transition-all"
-                    >
-                        Create
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 /* ─── Folder Hover Preview ─── */
 function FolderPreview({ folderId, x, y }) {
@@ -220,7 +163,7 @@ function FolderPreview({ folderId, x, y }) {
 }
 
 /* ─── File Card (Grid view) ─── */
-function FileCard({ file, onOpen, onContextMenu, index }) {
+function FileCard({ file, onOpen, onContextMenu, index, selected, onClickItem }) {
     const [hoverPreview, setHoverPreview] = useState(null);
     const hoverTimeout = useRef(null);
     const { icon: Icon, color } = getFileIcon(file);
@@ -243,18 +186,24 @@ function FileCard({ file, onOpen, onContextMenu, index }) {
 
     return (
         <>
-            <motion.div
+            <motion.div data-file-id={file.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: index * 0.03 }}
-                className="file-card group relative rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] cursor-pointer overflow-hidden"
-                onClick={() => onOpen(file)}
+                className={`file-card group relative rounded-2xl border bg-[var(--card-bg)] cursor-pointer overflow-hidden shadow-[0_1px_0_rgba(0,0,0,0.03)] ${selected ? "border-[var(--accent)] ring-1 ring-[var(--accent)]" : "border-[var(--card-border)]"}`}
+                onClick={(e) => onClickItem(e, file)}
                 onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
-                <div className="h-[120px] flex items-center justify-center bg-[var(--bg-secondary)]">
-                    <Icon className="w-10 h-10" style={{ color }} strokeWidth={1.5} />
+                <div className="h-[170px] flex items-center justify-center bg-[var(--bg-secondary)]">
+                    {file.is_folder ? (
+                        <Icon className="w-14 h-14 app-icon-solid" style={{ color }} strokeWidth={1.5} />
+                    ) : (
+                        <div className="w-[78%] h-[88%] rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-center">
+                            <Icon className="w-10 h-10 app-icon-solid" style={{ color }} strokeWidth={1.5} />
+                        </div>
+                    )}
                 </div>
                 <div className="px-3 py-2.5">
                     <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">{file.name}</p>
@@ -266,7 +215,7 @@ function FileCard({ file, onOpen, onContextMenu, index }) {
                     onClick={(e) => { e.stopPropagation(); onContextMenu(e, file); }}
                     className="absolute top-2 right-2 p-1 rounded-md bg-[var(--card-bg)]/80 backdrop-blur opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
                 >
-                    <MoreVertical className="w-4 h-4" />
+                    <MoreVertical className="w-4 h-4 app-icon-solid" />
                 </button>
             </motion.div>
 
@@ -278,20 +227,20 @@ function FileCard({ file, onOpen, onContextMenu, index }) {
 }
 
 /* ─── File Row (List view) ─── */
-function FileRow({ file, onOpen, onContextMenu, index }) {
+function FileRow({ file, onOpen, onContextMenu, index, selected, onClickItem }) {
     const { icon: Icon, color } = getFileIcon(file);
 
     return (
-        <motion.div
+        <motion.div data-file-id={file.id}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.15, delay: index * 0.02 }}
-            className="file-card group flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent cursor-pointer"
-            onClick={() => onOpen(file)}
+            className={`file-card group flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer ${selected ? "border-[var(--accent)] bg-[var(--accent-light)]" : "border-transparent"}`}
+            onClick={(e) => onClickItem(e, file)}
             onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
         >
             <div className="w-8 h-8 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0">
-                <Icon className="w-4 h-4" style={{ color }} strokeWidth={1.5} />
+                <Icon className="w-4 h-4 app-icon-solid" style={{ color }} strokeWidth={1.5} />
             </div>
             <span className="flex-1 text-[13px] text-[var(--text-primary)] truncate font-medium">{file.name}</span>
             <span className="hidden sm:block text-[12px] text-[var(--text-tertiary)] w-[80px] text-right">{file.is_folder ? '—' : formatSize(file.size)}</span>
@@ -300,7 +249,7 @@ function FileRow({ file, onOpen, onContextMenu, index }) {
                 onClick={(e) => { e.stopPropagation(); onContextMenu(e, file); }}
                 className="p-1 rounded-md opacity-0 group-hover:opacity-100 text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-all"
             >
-                <MoreVertical className="w-4 h-4" />
+                <MoreVertical className="w-4 h-4 app-icon-solid" />
             </button>
         </motion.div>
     );
@@ -311,11 +260,16 @@ export default function FileGrid({
     files, onOpen, onDownload, onDelete, onRename, onExtract,
     onCreateFolder, onUpload, onCreateDocument, onRefresh,
     viewMode = 'grid',
+    onSelectionChange,
 }) {
     const [ctxMenu, setCtxMenu] = useState(null);
     const [inputModal, setInputModal] = useState(null); // { title, placeholder, defaultValue, onConfirm }
     const [shareModal, setShareModal] = useState(null); // file object
     const fileInputRef = useRef(null);
+    const rootRef = useRef(null);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [selectionRect, setSelectionRect] = useState(null);
+    const dragStartRef = useRef(null);
 
     const handleContextMenu = (e, file = null) => {
         e.preventDefault();
@@ -400,6 +354,55 @@ export default function FileGrid({
         e.target.value = '';
     };
 
+
+    useEffect(() => {
+        onSelectionChange?.(files.filter((f) => selectedIds.includes(f.id)));
+    }, [selectedIds, files, onSelectionChange]);
+
+    const handleItemClick = (e, file) => {
+        if (e.ctrlKey || e.metaKey) {
+            setSelectedIds((prev) => prev.includes(file.id) ? prev.filter((id) => id !== file.id) : [...prev, file.id]);
+            return;
+        }
+        if (selectedIds.length > 0) {
+            setSelectedIds([file.id]);
+            return;
+        }
+        onOpen(file);
+    };
+
+    const onMouseDownCapture = (e) => {
+        if (e.button !== 0 || e.target.closest('.file-card')) return;
+        const bounds = rootRef.current?.getBoundingClientRect();
+        if (!bounds) return;
+        dragStartRef.current = { x: e.clientX, y: e.clientY, bounds };
+        setSelectedIds([]);
+        setSelectionRect({ left: e.clientX, top: e.clientY, width: 0, height: 0 });
+    };
+
+    const onMouseMoveCapture = (e) => {
+        if (!dragStartRef.current || !rootRef.current) return;
+        const start = dragStartRef.current;
+        const left = Math.min(start.x, e.clientX);
+        const top = Math.min(start.y, e.clientY);
+        const width = Math.abs(e.clientX - start.x);
+        const height = Math.abs(e.clientY - start.y);
+        setSelectionRect({ left, top, width, height });
+
+        const rect = { left, top, right: left + width, bottom: top + height };
+        const cards = Array.from(rootRef.current.querySelectorAll('.file-card[data-file-id]'));
+        const hit = cards.filter((el) => {
+            const r = el.getBoundingClientRect();
+            return !(rect.right < r.left || rect.left > r.right || rect.bottom < r.top || rect.top > r.bottom);
+        }).map((el) => Number(el.dataset.fileId));
+        setSelectedIds(hit);
+    };
+
+    const onMouseUpCapture = () => {
+        dragStartRef.current = null;
+        setTimeout(() => setSelectionRect(null), 50);
+    };
+
     // Intercept ALL right-clicks in the content area
     const handleBgContextMenu = (e) => {
         // If the click was on a file card, the card's own handler fires first (it stops propagation via e.preventDefault)
@@ -435,8 +438,12 @@ export default function FileGrid({
 
     return (
         <div
-            className="min-h-[400px] pb-20"
+            ref={rootRef}
+            className="min-h-[400px] pb-20 relative"
             onContextMenu={handleBgContextMenu}
+            onMouseDown={onMouseDownCapture}
+            onMouseMove={onMouseMoveCapture}
+            onMouseUp={onMouseUpCapture}
         >
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
@@ -450,19 +457,20 @@ export default function FileGrid({
                         <span className="w-6" />
                     </div>
                     {files.map((file, i) => (
-                        <FileRow key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} />
+                        <FileRow key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} selected={selectedIds.includes(file.id)} onClickItem={handleItemClick} />
                     ))}
                 </div>
             ) : (
-                <div data-grid-bg className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                <div data-grid-bg className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                     {files.map((file, i) => (
-                        <FileCard key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} />
+                        <FileCard key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} selected={selectedIds.includes(file.id)} onClickItem={handleItemClick} />
                     ))}
                 </div>
             )}
 
             {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
             {inputModal && <InputModal {...inputModal} onCancel={() => setInputModal(null)} />}
+            {selectionRect && <div className="fixed border border-[var(--accent)] bg-[var(--accent-light)] pointer-events-none z-30" style={{ left: selectionRect.left, top: selectionRect.top, width: selectionRect.width, height: selectionRect.height }} />}
             {shareModal && <ShareModal file={shareModal} onClose={() => setShareModal(null)} />}
         </div>
     );
