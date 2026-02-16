@@ -1,11 +1,11 @@
 {
-    "env": {
-        "UVICORN_LOOP": "asyncio"
-    },
     "builds": [
         {
             "src": "main.py",
-            "use": "@vercel/python"
+            "use": "@vercel/python",
+            "config": {
+                "runtime": "python3.12"
+            }
         }
     ],
     "rewrites": [
@@ -29,6 +29,10 @@
                 {
                     "key": "Access-Control-Allow-Headers",
                     "value": "Authorization, Content-Type, Accept"
+                },
+                {
+                    "key": "Access-Control-Allow-Credentials",
+                    "value": "true"
                 }
             ]
         }

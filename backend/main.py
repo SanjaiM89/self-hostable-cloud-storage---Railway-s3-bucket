@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 from sqlalchemy import inspect, text
 import os
 
@@ -80,18 +82,11 @@ except Exception as e:
 
 app = FastAPI(title="Cloud Storage API")
 
-origins = [
-    "*",
-    "http://localhost:5173",
-    "http://localhost:3000",
-    "https://self-hostable-cloud-storage-railway-flax.vercel.app",
-]
-
+# CORS: allow all origins without credentials (wildcard + credentials is invalid)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_origin_regex=r"https://.*\.vercel\.app",
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -107,17 +102,19 @@ app.include_router(files.router)
 app.include_router(sharing.router)
 app.include_router(admin.router)
 
-from fastapi import WebSocket, WebSocketDisconnect
+# Only register WebSocket endpoint when NOT on Vercel (Vercel doesn't support WS)
+IS_VERCEL = bool(os.environ.get("VERCEL"))
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    await manager.connect(websocket)
-    try:
-        while True:
-            # Just keep connection alive, maybe handle ping/pong
-            data = await websocket.receive_text()
-            # Optional: handle incoming messages
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-    except Exception:
-        manager.disconnect(websocket)
+if not IS_VERCEL:
+    from fastapi import WebSocket, WebSocketDisconnect
+
+    @app.websocket("/ws/{client_id}")
+    async def websocket_endpoint(websocket: WebSocket, client_id: str):
+        await manager.connect(websocket)
+        try:
+            while True:
+                data = await websocket.receive_text()
+        except WebSocketDisconnect:
+            manager.disconnect(websocket)
+        except Exception:
+            manager.disconnect(websocket)
