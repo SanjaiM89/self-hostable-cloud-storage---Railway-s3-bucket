@@ -344,7 +344,7 @@ def save_file_content(
 
 
 @router.post("/folder")
-def create_folder(
+async def create_folder(
     folder: FolderCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -359,11 +359,11 @@ def create_folder(
         is_folder=True,
     )
     db.add(new_folder)
+    db.commit()
     db.refresh(new_folder)
     
     # Broadcast update
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": folder.parent_id}))
+    await manager.broadcast({"type": "refresh", "folder_id": folder.parent_id})
 
     return {
         "id": new_folder.id,
@@ -436,7 +436,7 @@ def download_file(
 
 
 @router.delete("/{file_id}")
-def delete_file(
+async def delete_file(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -455,9 +455,8 @@ def delete_file(
     db.commit()
     
     # Broadcast update (refresh current folder and trash)
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": file.parent_id}))
-    asyncio.create_task(manager.broadcast({"type": "refresh_trash"}))
+    await manager.broadcast({"type": "refresh", "folder_id": file.parent_id})
+    await manager.broadcast({"type": "refresh_trash"})
 
     return {"message": "Moved to trash"}
 
@@ -556,7 +555,7 @@ def list_trash(
 
 
 @router.post('/trash/restore/{file_id}')
-def restore_from_trash(
+async def restore_from_trash(
     file_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -576,15 +575,14 @@ def restore_from_trash(
     db.commit()
     
     # Broadcast
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": file.parent_id}))
-    asyncio.create_task(manager.broadcast({"type": "refresh_trash"}))
+    await manager.broadcast({"type": "refresh", "folder_id": file.parent_id})
+    await manager.broadcast({"type": "refresh_trash"})
 
     return {'message': 'Restored'}
 
 
 @router.delete('/trash/empty')
-def empty_trash(
+async def empty_trash(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -607,14 +605,13 @@ def empty_trash(
     db.commit()
     
     # Broadcast
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh_trash"}))
+    await manager.broadcast({"type": "refresh_trash"})
 
     return {"message": "Trash emptied", "deleted": deleted}
 
 
 @router.patch("/{file_id}")
-def rename_file(
+async def rename_file(
     file_id: int,
     data: FileRename,
     db: Session = Depends(get_db),
@@ -633,8 +630,7 @@ def rename_file(
     db.refresh(file)
     
     # Broadcast
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": file.parent_id}))
+    await manager.broadcast({"type": "refresh", "folder_id": file.parent_id})
 
     return {"id": file.id, "name": file.name}
 
