@@ -1,4 +1,8 @@
 {
+    "env": {
+        "UVICORN_LOOP": "asyncio",
+        "UVICORN_WS": "websockets"
+    },
     "builds": [
         {
             "src": "main.py",
