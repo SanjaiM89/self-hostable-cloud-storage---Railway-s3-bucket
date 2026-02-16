@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Home, Trash2, Settings, Plus, Search, HardDrive, Clock3, Boxes, Sparkles, Shield, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, Trash2, Settings, Plus, Search, HardDrive, Shield, PanelLeftClose, PanelLeftOpen, Upload, FileText, Sheet, MonitorPlay, Code } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { filesAPI } from '../utils/api';
 import { Tree } from './ui/file-tree';
 
-export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, collapsed, onToggleCollapse, onOpenTrash, onOpenSearch }) {
+export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onUpload, onCreateDocument, collapsed, onToggleCollapse, onOpenTrash, onOpenSearch }) {
     const [showNewFolder, setShowNewFolder] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
+    const [quickOpen, setQuickOpen] = useState(false);
     const [storage, setStorage] = useState({ used: 0, total: 2 * 1024 * 1024 * 1024 });
     const [folderTree, setFolderTree] = useState([]);
     const inputRef = useRef(null);
+    const quickUploadRef = useRef(null);
     const navigate = useNavigate();
     const user = useMemo(() => JSON.parse(localStorage.getItem('user') || 'null'), []);
 
@@ -42,6 +44,23 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, col
         setTimeout(fetchTree, 300);
     };
 
+
+
+    const handleQuickUpload = (e) => {
+        const files = Array.from(e.target.files || []);
+        if (files.length > 0) onUpload?.(files);
+        e.target.value = '';
+        setQuickOpen(false);
+    };
+
+    const quickCreate = (docType, fallbackName) => {
+        const name = window.prompt('Enter name:', fallbackName);
+        if (name && name.trim()) {
+            onCreateDocument?.(name.trim(), docType);
+        }
+        setQuickOpen(false);
+    };
+
     if (collapsed) {
         return (
             <aside className="w-[56px] h-screen flex flex-col items-center bg-[var(--sidebar-icon-rail)] border-r border-[var(--sidebar-border)] py-3 gap-2 flex-shrink-0">
@@ -56,26 +75,35 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, col
     return (
         <aside className="w-[302px] h-screen flex bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)] flex-shrink-0">
             {/* Eden-like activity rail */}
-            <div className="w-[56px] border-r border-[var(--sidebar-border)] bg-[var(--sidebar-icon-rail)] flex flex-col items-center py-3 gap-2">
-                <button className="w-9 h-9 rounded-full bg-[var(--sidebar-accent)] text-white flex items-center justify-center shadow-sm" title="New">
+            <div className="relative w-[56px] border-r border-[var(--sidebar-border)] bg-[var(--sidebar-icon-rail)] flex flex-col items-center py-3 gap-2">
+                <button className="w-9 h-9 rounded-full bg-[var(--sidebar-accent)] text-white flex items-center justify-center shadow-sm" title="New" onClick={() => setQuickOpen((v) => !v)}>
                     <Plus className="w-5 h-5" />
                 </button>
                 <button className="icon-rail-btn" onClick={() => onNavigate(null, 'Home')}><Home className="w-4 h-4" /></button>
-                <button className="icon-rail-btn" onClick={() => {}}><Clock3 className="w-4 h-4" /></button>
-                <button className="icon-rail-btn" onClick={() => {}}><Boxes className="w-4 h-4" /></button>
-                <button className="icon-rail-btn" onClick={() => {}}><Sparkles className="w-4 h-4" /></button>
                 <div className="mt-auto" />
                 <button className="icon-rail-btn" onClick={onToggleCollapse}><PanelLeftClose className="w-4 h-4" /></button>
                 <button className="icon-rail-btn" onClick={() => navigate('/settings')}><Settings className="w-4 h-4" /></button>
                 <div className="w-9 h-9 rounded-full bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)] text-sm font-semibold flex items-center justify-center">
                     {user?.username?.[0]?.toUpperCase() || 'S'}
                 </div>
+
+                {quickOpen && (
+                    <div className="absolute left-[62px] top-3 z-40 w-56 rounded-xl border border-[var(--border-color)] bg-[var(--card-bg)] shadow-xl p-1.5">
+                        <input ref={quickUploadRef} type="file" multiple className="hidden" onChange={handleQuickUpload} />
+                        <button onClick={() => quickUploadRef.current?.click()} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Upload className="w-4 h-4" />Upload</button>
+                        <button onClick={() => quickCreate('writer', 'Untitled Document')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><FileText className="w-4 h-4" />New Writer</button>
+                        <button onClick={() => quickCreate('spreadsheet', 'Untitled Spreadsheet')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Sheet className="w-4 h-4" />New Spreadsheet</button>
+                        <button onClick={() => quickCreate('presentation', 'Untitled Presentation')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><MonitorPlay className="w-4 h-4" />New PPT</button>
+                        <button onClick={() => { setShowNewFolder(true); setQuickOpen(false); }} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Plus className="w-4 h-4" />New Folder</button>
+                        <button onClick={() => quickCreate('markdown', 'Untitled')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Code className="w-4 h-4" />New Markdown</button>
+                    </div>
+                )}
             </div>
 
             {/* Main nav panel */}
             <div className="flex-1 flex flex-col min-w-0">
                 <div className="flex items-center gap-2.5 px-4 h-[52px] border-b border-[var(--sidebar-border)]">
-                    <span className="text-[31px] leading-none text-[var(--text-tertiary)]">Home</span>
+                    <button onClick={() => onNavigate(null, 'Home')} className="text-[31px] leading-none text-[var(--text-tertiary)] hover:text-[var(--text-primary)]">Home</button>
                 </div>
 
                 <div className="px-3 py-2 border-b border-[var(--sidebar-border)]">

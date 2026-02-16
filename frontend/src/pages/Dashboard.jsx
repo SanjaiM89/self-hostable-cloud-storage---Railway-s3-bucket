@@ -396,6 +396,8 @@ export default function Dashboard() {
                 currentFolder={currentFolder}
                 onNavigate={handleNavigate}
                 onCreateFolder={handleCreateFolder}
+                onUpload={handleUpload}
+                onCreateDocument={handleCreateDocument}
                 onOpenTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
                 onOpenSearch={() => setSearchOpen(true)}
                 collapsed={sidebarCollapsed}
