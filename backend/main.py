@@ -8,13 +8,13 @@ try:
     from .routers import auth, files, sharing, admin
     from .models import User
     from .auth.utils import get_password_hash
-    from .websockets import manager
+    from .ws_manager import manager
 except ImportError:
     from database import engine, Base, SessionLocal
     from routers import auth, files, sharing, admin
     from models import User
     from auth.utils import get_password_hash
-    from websockets import manager
+    from ws_manager import manager
 
 
 def ensure_schema_updates():
