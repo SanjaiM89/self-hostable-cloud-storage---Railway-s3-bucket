@@ -46,7 +46,7 @@ const CustomImage = Image.extend({
     },
 });
 
-export default function MarkdownViewer({ token, fileInfo }) {
+export default function MarkdownViewer({ token, fileInfo, overrideContent }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [fontSize, setFontSize] = useState(18);
@@ -86,8 +86,13 @@ export default function MarkdownViewer({ token, fileInfo }) {
         const loadContent = async () => {
             try {
                 setLoading(true);
-                const res = await sharesAPI.publicContent(token);
-                const text = res.data.content || '';
+                let text;
+                if (overrideContent !== undefined && overrideContent !== null) {
+                    text = overrideContent;
+                } else {
+                    const res = await sharesAPI.publicContent(token);
+                    text = res.data.content || '';
+                }
                 const { cleanContent, fontSize: parsedSize } = parseMarkdownMeta(text);
                 setFontSize(parsedSize);
                 if (editor) editor.commands.setContent(cleanContent);
@@ -99,7 +104,7 @@ export default function MarkdownViewer({ token, fileInfo }) {
             }
         };
         loadContent();
-    }, [token, editor]);
+    }, [token, editor, overrideContent]);
 
     if (loading) {
         return (

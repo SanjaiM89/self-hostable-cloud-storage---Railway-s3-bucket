@@ -417,6 +417,39 @@ def preview_shared_folder_file(token: str, file_id: int, db: Session = Depends(g
     return {"url": url, "name": target.name, "mime_type": target.mime_type}
 
 
+# ─── Shared folder: fetch raw content of a file (for markdown etc.) ───
+
+@router.get("/public/{token}/content/{file_id}")
+def get_shared_folder_file_content(token: str, file_id: int, db: Session = Depends(get_db)):
+    """Fetch raw text content of a file inside a shared folder (e.g. markdown)."""
+    share = db.query(FileShare).filter(FileShare.share_token == token).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share link not found")
+
+    shared_root = db.query(FileModel).filter(FileModel.id == share.file_id).first()
+    if not shared_root:
+        raise HTTPException(status_code=404, detail="Shared item not found")
+
+    # Validate file belongs to the shared item
+    if shared_root.id == file_id:
+        target = shared_root
+    elif shared_root.is_folder and _is_descendant(db, file_id, shared_root.id, shared_root.user_id):
+        target = db.query(FileModel).filter(FileModel.id == file_id).first()
+    else:
+        raise HTTPException(status_code=403, detail="File is not part of this shared item")
+
+    if not target or not target.s3_key:
+        raise HTTPException(status_code=404, detail="File not found or has no data")
+
+    try:
+        obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=target.s3_key)
+        content = obj['Body'].read().decode('utf-8')
+        return {"content": content, "name": target.name}
+    except Exception as e:
+        print(f"Error reading file content: {e}")
+        raise HTTPException(status_code=500, detail="Could not read file content")
+
+
 # ─── Shared folder: download individual file ───
 
 def _is_descendant(db, file_id, ancestor_folder_id, user_id):

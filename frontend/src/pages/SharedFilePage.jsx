@@ -4,35 +4,35 @@ import {
     Download, File, Lock, Folder, ChevronRight,
     Sun, Moon, FileText, Image, Film, Music,
     Archive, Code, Table, Database, FolderArchive,
-    ArrowLeft, ExternalLink, Eye,
+    ArrowLeft, Eye, LayoutGrid, List, X,
 } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
 import MarkdownViewer from '../components/MarkdownViewer';
 import PdfViewer from '../components/PdfViewer';
 import Loader from '../components/Loader';
 
-// ─── File icon helper ───
-function getFileIcon(file) {
-    if (file.is_folder) return <Folder className="w-5 h-5 text-[var(--accent)]" />;
+// ─── Helpers ───
+function getFileIcon(file, size = 'w-5 h-5') {
+    if (file.is_folder) return <Folder className={`${size} text-[var(--accent)]`} />;
     const ext = file.name?.split('.').pop()?.toLowerCase() || '';
     const mime = file.mime_type || '';
     if (mime.startsWith('image/') || /^(jpg|jpeg|png|gif|webp|svg|bmp|ico)$/.test(ext))
-        return <Image className="w-5 h-5 text-pink-400" />;
+        return <Image className={`${size} text-pink-400`} />;
     if (mime.startsWith('video/') || /^(mp4|webm|mov|avi|mkv)$/.test(ext))
-        return <Film className="w-5 h-5 text-purple-400" />;
+        return <Film className={`${size} text-purple-400`} />;
     if (mime.startsWith('audio/') || /^(mp3|wav|ogg|m4a|flac|aac)$/.test(ext))
-        return <Music className="w-5 h-5 text-cyan-400" />;
+        return <Music className={`${size} text-cyan-400`} />;
     if (/^(zip|rar|7z|tar|gz|bz2)$/.test(ext))
-        return <Archive className="w-5 h-5 text-amber-400" />;
+        return <Archive className={`${size} text-amber-400`} />;
     if (/^(js|ts|jsx|tsx|py|java|c|cpp|rs|go|rb|php|html|css|json|xml|yaml|yml|sh|sql)$/.test(ext))
-        return <Code className="w-5 h-5 text-green-400" />;
+        return <Code className={`${size} text-green-400`} />;
     if (/^(xlsx?|csv|ods)$/.test(ext))
-        return <Table className="w-5 h-5 text-emerald-400" />;
+        return <Table className={`${size} text-emerald-400`} />;
     if (/^(db|sqlite|sql)$/.test(ext))
-        return <Database className="w-5 h-5 text-orange-400" />;
+        return <Database className={`${size} text-orange-400`} />;
     if (/^(md|txt|rtf|doc|docx|pdf|odt)$/.test(ext))
-        return <FileText className="w-5 h-5 text-blue-400" />;
-    return <File className="w-5 h-5 text-[var(--text-tertiary)]" />;
+        return <FileText className={`${size} text-blue-400`} />;
+    return <File className={`${size} text-[var(--text-tertiary)]`} />;
 }
 
 function formatSize(bytes) {
@@ -52,8 +52,52 @@ function flatCount(items) {
     return count;
 }
 
-function isPdf(name) {
-    return name?.toLowerCase().endsWith('.pdf');
+const isPdf = (name) => name?.toLowerCase().endsWith('.pdf');
+const isMd = (name) => name?.toLowerCase().endsWith('.md');
+
+// ─── Inline Markdown Viewer for folder files ───
+function FolderMarkdownViewer({ token, fileId, fileName, onClose, darkMode }) {
+    const [content, setContent] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const res = await sharesAPI.publicFileContent(token, fileId);
+                setContent(res.data.content);
+            } catch (e) {
+                setError('Failed to load file content');
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, [token, fileId]);
+
+    if (loading) return (
+        <div className="flex items-center justify-center h-full">
+            <Loader className="scale-50" />
+        </div>
+    );
+    if (error) return (
+        <div className="flex items-center justify-center h-full">
+            <p className="text-red-400">{error}</p>
+        </div>
+    );
+
+    return (
+        <div className="h-screen w-screen flex flex-col" style={{ background: 'var(--bg-primary)' }}>
+            <div className="sf-topbar">
+                <button onClick={onClose} className="sf-icon-btn mr-2"><ArrowLeft size={18} /></button>
+                <FileText className="w-4 h-4 text-blue-400 mr-2" />
+                <span className="text-[13px] font-medium truncate text-[var(--text-primary)]">{fileName}</span>
+                <div className="flex-1" />
+            </div>
+            <div className="flex-1 overflow-auto">
+                <MarkdownViewer token={token} fileInfo={{ name: fileName, file_id: fileId }} overrideContent={content} />
+            </div>
+        </div>
+    );
 }
 
 // ─── Main Component ───
@@ -66,27 +110,30 @@ export default function SharedFilePage() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const [darkMode, setDarkMode] = useState(() => localStorage.getItem('shared_dark_mode') !== 'false');
+    const [viewMode, setViewMode] = useState(() => localStorage.getItem('shared_view_mode') || 'grid');
     const editorContainerRef = useRef(null);
     const editorInstanceRef = useRef(null);
 
-    // PDF preview state (for folder files or direct shares)
-    const [pdfPreview, setPdfPreview] = useState(null); // { file, url }
+    // Preview states
+    const [pdfPreview, setPdfPreview] = useState(null);
+    const [mdPreview, setMdPreview] = useState(null);
     const [pdfLoading, setPdfLoading] = useState(false);
 
-    // PDFs handled separately now
     const editableExts = /\.(docx?|xlsx?|pptx?|odt|ods|odp|csv|txt|rtf)$/i;
     const canDownload = fileInfo && fileInfo.permission !== 'view';
 
-    // Persist dark mode
+    // Persist preferences
     useEffect(() => {
         localStorage.setItem('shared_dark_mode', darkMode ? 'true' : 'false');
         document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
     }, [darkMode]);
 
-    // Load file info & folder contents
     useEffect(() => {
-        loadFile();
-    }, [token]);
+        localStorage.setItem('shared_view_mode', viewMode);
+    }, [viewMode]);
+
+    // Load file info & folder contents
+    useEffect(() => { loadFile(); }, [token]);
 
     const loadFile = async () => {
         try {
@@ -102,7 +149,6 @@ export default function SharedFilePage() {
                     setFolderContents([]);
                 }
             } else if (isPdf(res.data.name)) {
-                // Directly shared PDF → load presigned URL for PDF viewer
                 try {
                     const previewRes = await sharesAPI.publicPreview(token, res.data.file_id);
                     setPdfPreview({ file: res.data, url: previewRes.data.url });
@@ -110,7 +156,6 @@ export default function SharedFilePage() {
                     console.error('Failed to load PDF preview:', e);
                 }
             } else if (editableExts.test(res.data.name)) {
-                // OnlyOffice-compatible
                 try {
                     const cfgRes = await sharesAPI.publicEditorConfig(token);
                     setEditorConfig(cfgRes.data);
@@ -162,7 +207,7 @@ export default function SharedFilePage() {
         };
     }, [editorConfig]);
 
-    // Download single shared file
+    // Download handlers
     const handleDownload = async () => {
         try {
             const res = await sharesAPI.publicDownload(token);
@@ -172,26 +217,18 @@ export default function SharedFilePage() {
         }
     };
 
-    // Download individual file from folder
     const handleDownloadFile = (fileId) => {
         const url = sharesAPI.publicDownloadFile(token, fileId);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = url; a.download = '';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
     };
 
-    // Download folder as ZIP
     const handleDownloadZip = () => {
         const url = sharesAPI.publicDownloadZip(token);
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `${fileInfo?.name || 'folder'}.zip`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        a.href = url; a.download = `${fileInfo?.name || 'folder'}.zip`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
     };
 
     // Open PDF from folder
@@ -207,40 +244,50 @@ export default function SharedFilePage() {
         }
     };
 
-    // Handle file click in folder browser
+    // Handle file click
     const handleFileClick = (item) => {
         if (item.is_folder) {
             navigateInto(item);
         } else if (isPdf(item.name)) {
             openPdfFromFolder(item);
+        } else if (isMd(item.name)) {
+            setMdPreview({ id: item.id, name: item.name });
         }
     };
 
-    // Navigate into subfolder
+    // Navigation
     const navigateInto = (folder) => {
         setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name, children: folder.children || [] }]);
     };
-
     const navigateBack = () => setCurrentPath(prev => prev.slice(0, -1));
-
     const navigateToBreadcrumb = (index) => {
         if (index < 0) setCurrentPath([]);
         else setCurrentPath(prev => prev.slice(0, index + 1));
     };
 
-    // Get current items to display
     const currentItems = currentPath.length > 0
         ? currentPath[currentPath.length - 1].children || []
         : folderContents || [];
 
-    // ─── Theme toggle button ───
+    // ─── Shared sub-components ───
     const ThemeToggle = () => (
-        <button onClick={() => setDarkMode(v => !v)} className="sf-theme-toggle" title={darkMode ? 'Switch to Light' : 'Switch to Dark'}>
+        <button onClick={() => setDarkMode(v => !v)} className="sf-icon-btn" title={darkMode ? 'Light Mode' : 'Dark Mode'}>
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
         </button>
     );
 
-    // ─── Loading State ───
+    const ViewToggle = () => (
+        <div className="sf-view-toggle">
+            <button onClick={() => setViewMode('grid')} className={`sf-vt-btn ${viewMode === 'grid' ? 'sf-vt-active' : ''}`} title="Grid View">
+                <LayoutGrid size={15} />
+            </button>
+            <button onClick={() => setViewMode('list')} className={`sf-vt-btn ${viewMode === 'list' ? 'sf-vt-active' : ''}`} title="List View">
+                <List size={15} />
+            </button>
+        </div>
+    );
+
+    // ─── States ───
     if (loading) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
@@ -252,7 +299,6 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── Error State ───
     if (error) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
@@ -268,10 +314,8 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── PDF Viewer (direct share OR folder file) ───
+    // ─── PDF Viewer ───
     if (pdfPreview) {
-        // If viewing from a folder, the PdfViewer's close goes back to folder.
-        // If direct PDF share, close shows the file card fallback.
         const isFromFolder = fileInfo?.is_folder;
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
@@ -279,14 +323,7 @@ export default function SharedFilePage() {
                     <PdfViewer
                         file={pdfPreview.file}
                         fileUrl={pdfPreview.url}
-                        onClose={() => {
-                            if (isFromFolder) {
-                                setPdfPreview(null);
-                            } else {
-                                // Direct PDF share — just reset to show the card
-                                setPdfPreview(null);
-                            }
-                        }}
+                        onClose={() => setPdfPreview(null)}
                         hideDownload={!canDownload}
                     />
                 </div>
@@ -295,10 +332,23 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── Directly shared PDF — auto-open in viewer (already handled above via pdfPreview state) ───
-    // If PDF preview failed to load, fall through to the file card below.
+    // ─── Markdown Viewer from folder ───
+    if (mdPreview) {
+        return (
+            <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
+                <FolderMarkdownViewer
+                    token={token}
+                    fileId={mdPreview.id}
+                    fileName={mdPreview.name}
+                    onClose={() => setMdPreview(null)}
+                    darkMode={darkMode}
+                />
+                <style>{sharedPageCSS}</style>
+            </div>
+        );
+    }
 
-    // ─── OnlyOffice Editor (for docs/spreadsheets, NOT pdfs) ───
+    // ─── OnlyOffice Editor ───
     if (editorConfig && !fileInfo?.is_folder) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
@@ -329,8 +379,8 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── Markdown Viewer ───
-    if (fileInfo && !fileInfo.is_folder && fileInfo.name.endsWith('.md')) {
+    // ─── Markdown Viewer (direct share) ───
+    if (fileInfo && !fileInfo.is_folder && isMd(fileInfo.name)) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
                 <div className="sf-topbar sf-topbar-fixed">
@@ -349,7 +399,6 @@ export default function SharedFilePage() {
     if (fileInfo?.is_folder) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
-                {/* PDF loading overlay */}
                 {pdfLoading && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
                         <div className="text-center">
@@ -366,15 +415,14 @@ export default function SharedFilePage() {
                         <h1 className="text-sm font-semibold text-[var(--text-primary)] leading-tight">{fileInfo.name}</h1>
                         <p className="text-[10px] text-[var(--text-secondary)] mt-0.5">
                             Shared by <strong className="text-[var(--accent)]">{fileInfo.shared_by}</strong>
-                            &nbsp;·&nbsp;
-                            {flatCount(folderContents || [])} files
-                            &nbsp;·&nbsp;
+                            &nbsp;·&nbsp;{flatCount(folderContents || [])} files&nbsp;·&nbsp;
                             <span className="sf-perm-badge-inline">
                                 {fileInfo.permission === 'view' ? 'View Only' : fileInfo.permission === 'download' ? 'View & Download' : 'Full Access'}
                             </span>
                         </p>
                     </div>
                     <div className="flex-1" />
+                    <ViewToggle />
                     <ThemeToggle />
                     {canDownload && (
                         <button onClick={handleDownloadZip} className="sf-btn-primary ml-3">
@@ -398,23 +446,58 @@ export default function SharedFilePage() {
                     ))}
                 </div>
 
-                {/* Back button for subfolders */}
+                {/* Back button */}
                 {currentPath.length > 0 && (
-                    <div className="px-6 pb-2">
+                    <div className="px-6 pb-2 pt-2">
                         <button onClick={navigateBack} className="sf-back-btn">
                             <ArrowLeft className="w-4 h-4" /> Back
                         </button>
                     </div>
                 )}
 
-                {/* File list */}
+                {/* File list / grid */}
                 <div className="sf-file-list">
                     {currentItems.length === 0 ? (
                         <div className="text-center py-16 text-[var(--text-tertiary)]">
                             <Folder className="w-12 h-12 mx-auto mb-3 opacity-40" />
                             <p>This folder is empty</p>
                         </div>
+                    ) : viewMode === 'grid' ? (
+                        /* ═══ GRID VIEW ═══ */
+                        <div className="sf-grid">
+                            {currentItems.map(item => (
+                                <div key={item.id}
+                                    className="sf-grid-card"
+                                    onClick={() => handleFileClick(item)}
+                                    style={{ cursor: (item.is_folder || isPdf(item.name) || isMd(item.name)) ? 'pointer' : 'default' }}
+                                >
+                                    <div className="sf-grid-icon">
+                                        {getFileIcon(item, 'w-8 h-8')}
+                                    </div>
+                                    <div className="sf-grid-name">{item.name}</div>
+                                    <div className="sf-grid-meta">
+                                        {item.is_folder ? `${flatCount(item.children || [])} items` : formatSize(item.size)}
+                                    </div>
+                                    {/* Action badges */}
+                                    <div className="sf-grid-actions">
+                                        {isPdf(item.name) && !item.is_folder && (
+                                            <span className="sf-preview-badge"><Eye className="w-3 h-3" /> View</span>
+                                        )}
+                                        {isMd(item.name) && !item.is_folder && (
+                                            <span className="sf-preview-badge"><Eye className="w-3 h-3" /> View</span>
+                                        )}
+                                        {!item.is_folder && canDownload && (
+                                            <button onClick={(e) => { e.stopPropagation(); handleDownloadFile(item.id); }}
+                                                className="sf-dl-btn-sm" title="Download">
+                                                <Download className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
                     ) : (
+                        /* ═══ LIST VIEW ═══ */
                         <div className="sf-table">
                             <div className="sf-table-header">
                                 <span className="sf-col-name">Name</span>
@@ -425,13 +508,13 @@ export default function SharedFilePage() {
                                 <div key={item.id}
                                     className="sf-table-row"
                                     onClick={() => handleFileClick(item)}
-                                    style={{ cursor: (item.is_folder || isPdf(item.name)) ? 'pointer' : 'default' }}
+                                    style={{ cursor: (item.is_folder || isPdf(item.name) || isMd(item.name)) ? 'pointer' : 'default' }}
                                 >
                                     <div className="sf-col-name">
                                         {getFileIcon(item)}
                                         <span className="truncate ml-2">{item.name}</span>
                                         {item.is_folder && <ChevronRight className="w-4 h-4 text-[var(--text-tertiary)] ml-auto" />}
-                                        {isPdf(item.name) && !item.is_folder && (
+                                        {(isPdf(item.name) || isMd(item.name)) && !item.is_folder && (
                                             <span className="sf-preview-badge ml-auto">
                                                 <Eye className="w-3 h-3" /> View
                                             </span>
@@ -459,7 +542,7 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── Single File Card (non-editable, non-PDF) ───
+    // ─── Single File Card ───
     return (
         <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
             <div className="sf-topbar sf-topbar-fixed">
@@ -496,31 +579,35 @@ export default function SharedFilePage() {
 
 // ─── CSS ───
 const sharedPageCSS = `
-    /* Theme variables */
+    /* ═══ Theme: matching main app colors ═══ */
     .sf-page[data-theme="dark"] {
-        --bg-primary: #0f0f14;
-        --bg-secondary: #16161d;
-        --card-bg: #1c1c27;
-        --text-primary: #e4e4ed;
-        --text-secondary: #9191a8;
-        --text-tertiary: #5c5c73;
-        --border-color: rgba(255,255,255,0.08);
+        --bg-primary: #262626;
+        --bg-secondary: #2d2d2d;
+        --bg-tertiary: #343434;
+        --card-bg: #2f2f32;
+        --card-hover: #38383d;
+        --text-primary: #f3f4f6;
+        --text-secondary: #d1d5db;
+        --text-tertiary: #9ca3af;
+        --border-color: #3f3f46;
         --accent: #34d399;
         --accent-rgb: 52,211,153;
-        --hover-bg: rgba(255,255,255,0.04);
+        --hover-bg: #38383d;
         --row-hover: rgba(52,211,153,0.06);
     }
     .sf-page[data-theme="light"] {
-        --bg-primary: #f8f9fc;
-        --bg-secondary: #ffffff;
+        --bg-primary: #ffffff;
+        --bg-secondary: #f5f5f5;
+        --bg-tertiary: #ebebeb;
         --card-bg: #ffffff;
-        --text-primary: #1a1a2e;
-        --text-secondary: #6b7280;
-        --text-tertiary: #9ca3af;
-        --border-color: rgba(0,0,0,0.08);
+        --card-hover: #f0f0f5;
+        --text-primary: #1e1e2e;
+        --text-secondary: #585b70;
+        --text-tertiary: #7f849c;
+        --border-color: #e6e6e6;
         --accent: #40a02b;
         --accent-rgb: 64,160,43;
-        --hover-bg: rgba(0,0,0,0.03);
+        --hover-bg: #eceff1;
         --row-hover: rgba(64,160,43,0.06);
     }
     .sf-page {
@@ -528,24 +615,37 @@ const sharedPageCSS = `
         font-family: 'Inter', -apple-system, sans-serif;
     }
 
-    /* Top bar */
+    /* ═══ Top bar ═══ */
     .sf-topbar {
         height: 52px; display: flex; align-items: center; padding: 0 20px;
         border-bottom: 1px solid var(--border-color); background: var(--card-bg);
-        position: sticky; top: 0; z-index: 10;
+        position: sticky; top: 0; z-index: 10; gap: 6px;
     }
     .sf-topbar-fixed { position: fixed; top: 0; left: 0; right: 0; }
 
-    /* Theme toggle */
-    .sf-theme-toggle {
+    /* ═══ Icon buttons ═══ */
+    .sf-icon-btn {
         width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
         border-radius: 10px; border: 1px solid var(--border-color);
         background: var(--bg-secondary); color: var(--text-secondary);
         cursor: pointer; transition: all 0.2s;
     }
-    .sf-theme-toggle:hover { background: var(--hover-bg); color: var(--text-primary); }
+    .sf-icon-btn:hover { background: var(--hover-bg); color: var(--text-primary); }
 
-    /* Buttons */
+    /* ═══ View toggle ═══ */
+    .sf-view-toggle {
+        display: flex; border-radius: 10px; border: 1px solid var(--border-color);
+        overflow: hidden; margin-right: 4px;
+    }
+    .sf-vt-btn {
+        width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+        background: var(--bg-secondary); color: var(--text-tertiary);
+        border: none; cursor: pointer; transition: all 0.15s;
+    }
+    .sf-vt-btn:hover { color: var(--text-primary); }
+    .sf-vt-active { background: var(--accent) !important; color: #fff !important; }
+
+    /* ═══ Buttons ═══ */
     .sf-btn-primary {
         display: inline-flex; align-items: center; gap: 6px;
         padding: 8px 16px; border-radius: 10px; font-size: 13px;
@@ -554,6 +654,7 @@ const sharedPageCSS = `
         box-shadow: 0 2px 8px rgba(var(--accent-rgb), 0.25);
     }
     .sf-btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
     .sf-dl-btn {
         width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
         border-radius: 8px; border: 1px solid var(--border-color);
@@ -562,18 +663,23 @@ const sharedPageCSS = `
     }
     .sf-dl-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 
-    /* Permission badges */
+    .sf-dl-btn-sm {
+        width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+        border-radius: 7px; border: 1px solid var(--border-color);
+        background: transparent; color: var(--text-secondary);
+        cursor: pointer; transition: all 0.15s;
+    }
+    .sf-dl-btn-sm:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+    /* ═══ Badges ═══ */
     .sf-perm-badge {
         margin-left: 8px; font-size: 10px; padding: 2px 8px;
         border-radius: 6px; background: var(--bg-secondary); color: var(--text-secondary);
     }
     .sf-perm-badge-inline {
         font-size: 10px; padding: 1px 6px; border-radius: 4px;
-        background: rgba(var(--accent-rgb),0.12); color: var(--accent);
-        font-weight: 600;
+        background: rgba(var(--accent-rgb),0.12); color: var(--accent); font-weight: 600;
     }
-
-    /* Preview badge on PDF rows */
     .sf-preview-badge {
         display: inline-flex; align-items: center; gap: 3px;
         font-size: 10px; padding: 2px 8px; border-radius: 6px;
@@ -581,7 +687,7 @@ const sharedPageCSS = `
         font-weight: 600; white-space: nowrap;
     }
 
-    /* Breadcrumb */
+    /* ═══ Breadcrumb ═══ */
     .sf-breadcrumb {
         display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
         padding: 10px 20px; border-bottom: 1px solid var(--border-color);
@@ -590,13 +696,12 @@ const sharedPageCSS = `
     .sf-breadcrumb-item {
         display: flex; align-items: center; gap: 4px; padding: 2px 8px;
         border-radius: 6px; background: transparent; border: none;
-        color: var(--text-secondary); cursor: pointer; font-size: 13px;
-        transition: all 0.15s;
+        color: var(--text-secondary); cursor: pointer; font-size: 13px; transition: all 0.15s;
     }
     .sf-breadcrumb-item:hover { background: var(--hover-bg); color: var(--text-primary); }
     .sf-breadcrumb-item:last-child { color: var(--text-primary); font-weight: 600; }
 
-    /* Back button */
+    /* ═══ Back button ═══ */
     .sf-back-btn {
         display: inline-flex; align-items: center; gap: 4px;
         padding: 4px 12px; border-radius: 8px; font-size: 12px;
@@ -605,8 +710,33 @@ const sharedPageCSS = `
     }
     .sf-back-btn:hover { background: var(--hover-bg); color: var(--text-primary); }
 
-    /* File table */
-    .sf-file-list { padding: 12px 20px; }
+    /* ═══ File list container ═══ */
+    .sf-file-list { padding: 16px 20px; }
+
+    /* ═══ Grid View ═══ */
+    .sf-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+        gap: 12px;
+    }
+    .sf-grid-card {
+        display: flex; flex-direction: column; align-items: center;
+        padding: 20px 12px 14px; border-radius: 12px;
+        border: 1px solid var(--border-color); background: var(--card-bg);
+        transition: all 0.2s; position: relative;
+    }
+    .sf-grid-card:hover { background: var(--card-hover); border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+    .sf-grid-icon { margin-bottom: 10px; }
+    .sf-grid-name {
+        font-size: 12px; font-weight: 600; text-align: center;
+        color: var(--text-primary); word-break: break-word;
+        line-height: 1.3; margin-bottom: 4px;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .sf-grid-meta { font-size: 10px; color: var(--text-tertiary); margin-bottom: 6px; }
+    .sf-grid-actions { display: flex; align-items: center; gap: 4px; margin-top: auto; }
+
+    /* ═══ List View (Table) ═══ */
     .sf-table { border: 1px solid var(--border-color); border-radius: 12px; overflow: hidden; }
     .sf-table-header {
         display: grid; grid-template-columns: 1fr 120px 60px;
@@ -618,8 +748,7 @@ const sharedPageCSS = `
     .sf-table-row {
         display: grid; grid-template-columns: 1fr 120px 60px;
         padding: 10px 16px; align-items: center;
-        border-bottom: 1px solid var(--border-color);
-        transition: background 0.15s;
+        border-bottom: 1px solid var(--border-color); transition: background 0.15s;
     }
     .sf-table-row:last-child { border-bottom: none; }
     .sf-table-row:hover { background: var(--row-hover); }
@@ -627,18 +756,20 @@ const sharedPageCSS = `
     .sf-col-size { font-size: 12px; }
     .sf-col-action { display: flex; justify-content: flex-end; }
 
-    /* Card */
+    /* ═══ Card ═══ */
     .sf-card {
         width: 400px; padding: 32px; text-align: center;
         border-radius: 16px; border: 1px solid var(--border-color);
         background: var(--card-bg); box-shadow: 0 8px 32px rgba(0,0,0,0.12);
     }
 
-    /* Responsive */
+    /* ═══ Responsive ═══ */
     @media (max-width: 640px) {
+        .sf-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+        .sf-grid-card { padding: 14px 8px 10px; }
         .sf-table-header, .sf-table-row { grid-template-columns: 1fr 80px 50px; }
         .sf-topbar { padding: 0 12px; }
-        .sf-file-list { padding: 8px 12px; }
+        .sf-file-list { padding: 10px 12px; }
         .sf-card { width: 90vw; }
     }
 `;
