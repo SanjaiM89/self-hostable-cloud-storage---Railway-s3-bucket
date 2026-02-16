@@ -220,7 +220,7 @@ function FolderPreview({ folderId, x, y }) {
 }
 
 /* ─── File Card (Grid view) ─── */
-function FileCard({ file, onOpen, onContextMenu, index }) {
+function FileCard({ file, onOpen, onContextMenu, index, selected, onClickItem }) {
     const [hoverPreview, setHoverPreview] = useState(null);
     const hoverTimeout = useRef(null);
     const { icon: Icon, color } = getFileIcon(file);
@@ -243,18 +243,24 @@ function FileCard({ file, onOpen, onContextMenu, index }) {
 
     return (
         <>
-            <motion.div
+            <motion.div data-file-id={file.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.2, delay: index * 0.03 }}
-                className="file-card group relative rounded-xl border border-[var(--card-border)] bg-[var(--card-bg)] cursor-pointer overflow-hidden"
-                onClick={() => onOpen(file)}
+                className={`file-card group relative rounded-2xl border bg-[var(--card-bg)] cursor-pointer overflow-hidden shadow-[0_1px_0_rgba(0,0,0,0.03)] ${selected ? "border-[var(--accent)] ring-1 ring-[var(--accent)]" : "border-[var(--card-border)]"}`}
+                onClick={(e) => onClickItem(e, file)}
                 onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
                 onMouseEnter={handleMouseEnter}
                 onMouseLeave={handleMouseLeave}
             >
-                <div className="h-[120px] flex items-center justify-center bg-[var(--bg-secondary)]">
-                    <Icon className="w-10 h-10" style={{ color }} strokeWidth={1.5} />
+                <div className="h-[170px] flex items-center justify-center bg-[var(--bg-secondary)]">
+                    {file.is_folder ? (
+                        <Icon className="w-14 h-14" style={{ color }} strokeWidth={1.5} />
+                    ) : (
+                        <div className="w-[78%] h-[88%] rounded-2xl border border-[var(--card-border)] bg-[var(--card-bg)] flex items-center justify-center">
+                            <Icon className="w-10 h-10" style={{ color }} strokeWidth={1.5} />
+                        </div>
+                    )}
                 </div>
                 <div className="px-3 py-2.5">
                     <p className="text-[13px] font-medium text-[var(--text-primary)] truncate">{file.name}</p>
@@ -278,16 +284,16 @@ function FileCard({ file, onOpen, onContextMenu, index }) {
 }
 
 /* ─── File Row (List view) ─── */
-function FileRow({ file, onOpen, onContextMenu, index }) {
+function FileRow({ file, onOpen, onContextMenu, index, selected, onClickItem }) {
     const { icon: Icon, color } = getFileIcon(file);
 
     return (
-        <motion.div
+        <motion.div data-file-id={file.id}
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.15, delay: index * 0.02 }}
-            className="file-card group flex items-center gap-3 px-3 py-2 rounded-lg border border-transparent cursor-pointer"
-            onClick={() => onOpen(file)}
+            className={`file-card group flex items-center gap-3 px-3 py-2 rounded-lg border cursor-pointer ${selected ? "border-[var(--accent)] bg-[var(--accent-light)]" : "border-transparent"}`}
+            onClick={(e) => onClickItem(e, file)}
             onContextMenu={(e) => { e.preventDefault(); onContextMenu(e, file); }}
         >
             <div className="w-8 h-8 rounded-lg bg-[var(--bg-secondary)] flex items-center justify-center flex-shrink-0">
@@ -311,11 +317,16 @@ export default function FileGrid({
     files, onOpen, onDownload, onDelete, onRename, onExtract,
     onCreateFolder, onUpload, onCreateDocument, onRefresh,
     viewMode = 'grid',
+    onSelectionChange,
 }) {
     const [ctxMenu, setCtxMenu] = useState(null);
     const [inputModal, setInputModal] = useState(null); // { title, placeholder, defaultValue, onConfirm }
     const [shareModal, setShareModal] = useState(null); // file object
     const fileInputRef = useRef(null);
+    const rootRef = useRef(null);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const [selectionRect, setSelectionRect] = useState(null);
+    const dragStartRef = useRef(null);
 
     const handleContextMenu = (e, file = null) => {
         e.preventDefault();
@@ -400,6 +411,55 @@ export default function FileGrid({
         e.target.value = '';
     };
 
+
+    useEffect(() => {
+        onSelectionChange?.(files.filter((f) => selectedIds.includes(f.id)));
+    }, [selectedIds, files, onSelectionChange]);
+
+    const handleItemClick = (e, file) => {
+        if (e.ctrlKey || e.metaKey) {
+            setSelectedIds((prev) => prev.includes(file.id) ? prev.filter((id) => id !== file.id) : [...prev, file.id]);
+            return;
+        }
+        if (selectedIds.length > 0) {
+            setSelectedIds([file.id]);
+            return;
+        }
+        onOpen(file);
+    };
+
+    const onMouseDownCapture = (e) => {
+        if (e.button !== 0 || e.target.closest('.file-card')) return;
+        const bounds = rootRef.current?.getBoundingClientRect();
+        if (!bounds) return;
+        dragStartRef.current = { x: e.clientX, y: e.clientY, bounds };
+        setSelectedIds([]);
+        setSelectionRect({ left: e.clientX, top: e.clientY, width: 0, height: 0 });
+    };
+
+    const onMouseMoveCapture = (e) => {
+        if (!dragStartRef.current || !rootRef.current) return;
+        const start = dragStartRef.current;
+        const left = Math.min(start.x, e.clientX);
+        const top = Math.min(start.y, e.clientY);
+        const width = Math.abs(e.clientX - start.x);
+        const height = Math.abs(e.clientY - start.y);
+        setSelectionRect({ left, top, width, height });
+
+        const rect = { left, top, right: left + width, bottom: top + height };
+        const cards = Array.from(rootRef.current.querySelectorAll('.file-card[data-file-id]'));
+        const hit = cards.filter((el) => {
+            const r = el.getBoundingClientRect();
+            return !(rect.right < r.left || rect.left > r.right || rect.bottom < r.top || rect.top > r.bottom);
+        }).map((el) => Number(el.dataset.fileId));
+        setSelectedIds(hit);
+    };
+
+    const onMouseUpCapture = () => {
+        dragStartRef.current = null;
+        setTimeout(() => setSelectionRect(null), 50);
+    };
+
     // Intercept ALL right-clicks in the content area
     const handleBgContextMenu = (e) => {
         // If the click was on a file card, the card's own handler fires first (it stops propagation via e.preventDefault)
@@ -435,8 +495,12 @@ export default function FileGrid({
 
     return (
         <div
-            className="min-h-[400px] pb-20"
+            ref={rootRef}
+            className="min-h-[400px] pb-20 relative"
             onContextMenu={handleBgContextMenu}
+            onMouseDown={onMouseDownCapture}
+            onMouseMove={onMouseMoveCapture}
+            onMouseUp={onMouseUpCapture}
         >
             <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
 
@@ -450,19 +514,20 @@ export default function FileGrid({
                         <span className="w-6" />
                     </div>
                     {files.map((file, i) => (
-                        <FileRow key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} />
+                        <FileRow key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} selected={selectedIds.includes(file.id)} onClickItem={handleItemClick} />
                     ))}
                 </div>
             ) : (
-                <div data-grid-bg className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                <div data-grid-bg className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                     {files.map((file, i) => (
-                        <FileCard key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} />
+                        <FileCard key={file.id} file={file} index={i} onOpen={onOpen} onContextMenu={handleContextMenu} selected={selectedIds.includes(file.id)} onClickItem={handleItemClick} />
                     ))}
                 </div>
             )}
 
             {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
             {inputModal && <InputModal {...inputModal} onCancel={() => setInputModal(null)} />}
+            {selectionRect && <div className="fixed border border-[var(--accent)] bg-[var(--accent-light)] pointer-events-none z-30" style={{ left: selectionRect.left, top: selectionRect.top, width: selectionRect.width, height: selectionRect.height }} />}
             {shareModal && <ShareModal file={shareModal} onClose={() => setShareModal(null)} />}
         </div>
     );

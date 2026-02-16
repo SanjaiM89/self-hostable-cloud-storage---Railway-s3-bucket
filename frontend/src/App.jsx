@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
+import Loader from './components/Loader';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -8,6 +9,7 @@ const RegisterPage = lazy(() => import('./pages/RegisterPage'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const EditorPage = lazy(() => import('./pages/EditorPage'));
 const SharedFilePage = lazy(() => import('./pages/SharedFilePage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
 
 function LoadingFallback() {
   return (
@@ -20,18 +22,10 @@ function LoadingFallback() {
       color: 'var(--text-secondary, #999)',
       fontSize: '14px',
     }}>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: '32px', height: '32px',
-          border: '3px solid rgba(255,255,255,0.1)',
-          borderTopColor: '#7c3aed',
-          borderRadius: '50%',
-          animation: 'spin 0.6s linear infinite',
-          margin: '0 auto 12px',
-        }} />
+      <div className="flex flex-col items-center gap-2" style={{ textAlign: 'center' }}>
+        <Loader className="scale-75" />
         Loading...
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
@@ -80,6 +74,14 @@ export default function App() {
               <Route
                 path="/share/:token"
                 element={<SharedFilePage />}
+              />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminPage />
+                  </ProtectedRoute>
+                }
               />
               <Route
                 path="/editor/:fileId"

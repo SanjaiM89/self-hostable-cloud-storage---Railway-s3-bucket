@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, Copy, Check, Trash2, UserPlus, Globe, X } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
+import Loader from './Loader';
 
 export default function ShareModal({ file, onClose }) {
     const [shares, setShares] = useState([]);
@@ -131,7 +132,7 @@ export default function ShareModal({ file, onClose }) {
 
                 {loading ? (
                     <div className="flex items-center justify-center py-10">
-                        <div className="w-5 h-5 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin" />
+                        <Loader className="scale-50" />
                     </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto px-5 pb-2">

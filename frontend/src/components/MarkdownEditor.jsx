@@ -243,7 +243,7 @@ export default function MarkdownEditor({ file, onClose }) {
                 background: 'var(--bg-primary)', color: 'var(--text-secondary)',
             }}>
                 <div style={{ textAlign: 'center' }}>
-                    <div className="w-8 h-8 border-2 border-t-[var(--accent)] rounded-full animate-spin mx-auto mb-2" />
+                    <div className="mx-auto mb-2 flex justify-center"><Loader className="scale-50" /></div>
                     Loading content...
                 </div>
             </div>

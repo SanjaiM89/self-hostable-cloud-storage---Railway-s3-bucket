@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
@@ -11,6 +12,8 @@ let activityIdCounter = 0;
 
 import MediaViewerModal from '../components/MediaViewerModal';
 import { uploadFolder } from '../utils/folderUpload';
+import SearchModal from '../components/SearchModal';
+import Loader from '../components/Loader';
 
 export default function Dashboard() {
     const [files, setFiles] = useState([]);
@@ -24,6 +27,9 @@ export default function Dashboard() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [activityOpen, setActivityOpen] = useState(false);
     const [activities, setActivities] = useState([]);
+    const [viewScope, setViewScope] = useState('files');
+    const [selectedFiles, setSelectedFiles] = useState([]);
+    const [searchOpen, setSearchOpen] = useState(false);
 
     // Inline editor state
     const [editingFile, setEditingFile] = useState(null);
@@ -31,6 +37,8 @@ export default function Dashboard() {
     const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'unsaved'
     const editorContainerRef = useRef(null);
     const editorInstanceRef = useRef(null);
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
 
     // Markdown editor state
     const [markdownFile, setMarkdownFile] = useState(null);
@@ -39,18 +47,53 @@ export default function Dashboard() {
     const fetchFiles = useCallback(async () => {
         setLoading(true);
         try {
-            const res = await filesAPI.list(currentFolder);
-            setFiles(res.data || []);
+            const pageSize = 50;
+            const firstRes = viewScope === 'trash'
+                ? await filesAPI.trashPaginated(pageSize, 0)
+                : await filesAPI.listPaginated(currentFolder, pageSize, 0);
+
+            const firstItems = firstRes?.data?.items || [];
+            setFiles(firstItems);
             setHasLoadedOnce(true);
+
+            if (firstRes?.data?.has_more) {
+                const secondRes = viewScope === 'trash'
+                    ? await filesAPI.trashPaginated(pageSize, pageSize)
+                    : await filesAPI.listPaginated(currentFolder, pageSize, pageSize);
+                const secondItems = secondRes?.data?.items || [];
+                setFiles((prev) => [...prev, ...secondItems]);
+            }
         } catch (err) {
             console.error('Failed to fetch files:', err);
             setHasLoadedOnce(true);
         } finally {
             setLoading(false);
         }
-    }, [currentFolder]);
+    }, [currentFolder, viewScope]);
 
     useEffect(() => { fetchFiles(); }, [fetchFiles]);
+
+    useEffect(() => {
+        const isTrash = searchParams.get('trash') === '1';
+        if (isTrash) {
+            setViewScope('trash');
+            setCurrentFolder(null);
+            setBreadcrumbs([{ id: 'trash', name: 'Trash' }]);
+            return;
+        }
+
+        const folderFromUrl = searchParams.get('folder');
+        setViewScope('files');
+        if (!folderFromUrl) {
+            setCurrentFolder(null);
+            setBreadcrumbs([{ id: null, name: 'Home' }]);
+            return;
+        }
+        const numeric = Number(folderFromUrl);
+        if (!Number.isNaN(numeric) && numeric !== currentFolder) {
+            setCurrentFolder(numeric);
+        }
+    }, [searchParams]);
 
     // ─── Activity helpers ───
     const addActivity = (type, name) => {
@@ -69,7 +112,9 @@ export default function Dashboard() {
         // Close editor when navigating
         if (editingFile) closeEditor();
 
+        setViewScope('files');
         setCurrentFolder(folderId);
+        navigate(folderId ? `/?folder=${folderId}` : '/', { replace: false });
         if (folderId === null) {
             setBreadcrumbs([{ id: null, name: 'Home' }]);
         } else {
@@ -133,7 +178,11 @@ export default function Dashboard() {
     const handleDelete = async (file) => {
         if (window.confirm(`Delete "${file.name}"?`)) {
             try {
-                await filesAPI.delete(file.id);
+                if (viewScope === 'trash') {
+                    await filesAPI.emptyTrash();
+                } else {
+                    await filesAPI.delete(file.id);
+                }
                 fetchFiles();
             } catch (err) {
                 console.error('Delete failed:', err);
@@ -347,6 +396,8 @@ export default function Dashboard() {
                 currentFolder={currentFolder}
                 onNavigate={handleNavigate}
                 onCreateFolder={handleCreateFolder}
+                onOpenTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
+                onOpenSearch={() => setSearchOpen(true)}
                 collapsed={sidebarCollapsed}
                 onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
             />
@@ -371,6 +422,7 @@ export default function Dashboard() {
                     onUploadFolder={handleFolderUpload}
                     onToggleActivity={() => setActivityOpen((p) => !p)}
                     showBackButton={!!editingFile || !!markdownFile}
+                    onOpenSearch={() => setSearchOpen(true)}
                     onBack={() => {
                         if (markdownFile) {
                             setMarkdownFile(null);
@@ -458,15 +510,24 @@ export default function Dashboard() {
                         <div className="px-5 py-4 smooth-panel" style={{ display: (editingFile || markdownFile) ? 'none' : 'block' }}>
                             {loading && hasLoadedOnce && (
                                 <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
-                                    <span className="w-3.5 h-3.5 border-2 border-[var(--accent)]/30 border-t-[var(--accent)] rounded-full animate-spin" />
+                                    <Loader className="scale-50" />
                                     Refreshing files...
                                 </div>
                             )}
 
+                            {viewScope === 'trash' && (
+                                <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+                                    <span>Trash keeps deleted files for 30 days.</span>
+                                    <div className="flex gap-2">
+                                        <button className="px-2.5 py-1 rounded bg-[var(--card-bg)] border border-[var(--border-color)]" onClick={async () => { if (selectedFiles[0]) { await filesAPI.restoreFromTrash(selectedFiles[0].id); fetchFiles(); } }}>Restore selected</button>
+                                        <button className="px-2.5 py-1 rounded bg-red-500/20 text-red-300 border border-red-500/40" onClick={async () => { if (window.confirm('Empty trash permanently?')) { await filesAPI.emptyTrash(); fetchFiles(); } }}>Empty trash</button>
+                                    </div>
+                                </div>
+                            )}
                             {!hasLoadedOnce && loading ? (
                                 <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 py-2">
                                     {Array.from({ length: 10 }).map((_, i) => (
-                                        <div key={i} className="h-28 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] animate-pulse" />
+                                        <div key={i} className="h-28 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-center"><Loader className="scale-50" /></div>
                                     ))}
                                 </div>
                             ) : (
@@ -482,12 +543,21 @@ export default function Dashboard() {
                                     onUpload={handleUpload}
                                     onCreateDocument={handleCreateDocument}
                                     onRefresh={fetchFiles}
+                                    onSelectionChange={setSelectedFiles}
                                 />
                             )}
                         </div>
                     </div>
 
                     {/* Modals */}
+                    <SearchModal
+                        open={searchOpen}
+                        onClose={() => setSearchOpen(false)}
+                        currentFolder={currentFolder}
+                        includeTrashed={viewScope === 'trash'}
+                        onOpenResult={(item) => handleOpenFile(item)}
+                    />
+
                     {mediaFile && (
                         <MediaViewerModal
                             file={mediaFile}

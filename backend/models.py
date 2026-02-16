@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, BigInteger
 from sqlalchemy.orm import relationship
 try:
     from .database import Base
@@ -13,6 +13,8 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     email = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    is_admin = Column(Boolean, default=False)
+    storage_limit = Column(BigInteger, default=2 * 1024 * 1024 * 1024)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     files = relationship("File", back_populates="owner")
@@ -31,6 +33,9 @@ class File(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    is_trashed = Column(Boolean, default=False, index=True)
+    trashed_at = Column(DateTime, nullable=True)
+    original_parent_id = Column(Integer, nullable=True)
     
     owner = relationship("User", back_populates="files")
     children = relationship("File", backref="parent", remote_side=[id], foreign_keys=[parent_id])

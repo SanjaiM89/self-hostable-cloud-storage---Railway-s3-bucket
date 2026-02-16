@@ -18,6 +18,7 @@ export default function Navbar({
     onToggleActivity,
     showBackButton,
     onBack,
+    onOpenSearch,
 }) {
     const { isDark, toggleTheme } = useTheme();
     const { user, logout } = useAuth();
@@ -44,7 +45,7 @@ export default function Navbar({
     };
 
     return (
-        <header className="flex items-center md:h-[52px] px-3 md:px-4 py-2 md:py-0 gap-2 md:gap-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] sticky top-0 z-20 backdrop-blur-sm flex-shrink-0 flex-wrap md:flex-nowrap">
+        <header className="flex items-center md:h-[58px] px-3 md:px-5 py-2 md:py-0 gap-2 md:gap-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] sticky top-0 z-20 backdrop-blur-sm flex-shrink-0 flex-wrap md:flex-nowrap">
             {/* Back button for editor */}
             {showBackButton && (
                 <button
@@ -83,15 +84,14 @@ export default function Navbar({
 
             {/* Search */}
             {!showBackButton && (
-                <div className="relative w-full md:max-w-[240px] order-last md:order-none">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-tertiary)]" />
-                    <input
-                        type="text"
-                        placeholder="Search files..."
-                        value={searchQuery}
-                        onChange={(e) => onSearchChange(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[13px] text-[var(--text-primary)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:border-[var(--accent)] transition-colors"
-                    />
+                <div className="relative w-full md:max-w-[430px] order-last md:order-none">
+                    <button
+                        onClick={onOpenSearch}
+                        className="w-full flex items-center gap-2 pl-3 pr-3 py-2 rounded-xl bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[13px] text-[var(--text-tertiary)] hover:text-[var(--text-primary)] transition-colors"
+                    >
+                        <Search className="w-3.5 h-3.5" />
+                        <span className="text-[13px] font-normal">Search anything...</span>
+                    </button>
                 </div>
             )}
 
@@ -121,7 +121,7 @@ export default function Navbar({
 
                     <button
                         onClick={() => folderInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-lg transition-colors border border-[var(--border-color)]"
+                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--bg-secondary)] hover:bg-[var(--bg-hover)] text-[var(--text-primary)] text-[13px] font-medium rounded-xl transition-colors border border-[var(--border-color)]"
                         title="Upload Folder"
                     >
                         <FolderUp className="w-3.5 h-3.5" />
@@ -130,7 +130,7 @@ export default function Navbar({
 
                     <button
                         onClick={() => fileInputRef.current?.click()}
-                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-[13px] font-medium rounded-lg transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 md:px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white text-[13px] font-medium rounded-xl transition-colors"
                     >
                         <Upload className="w-3.5 h-3.5" />
                         Upload

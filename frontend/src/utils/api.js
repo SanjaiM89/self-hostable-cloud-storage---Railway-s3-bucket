@@ -30,11 +30,17 @@ api.interceptors.response.use(
 export const authAPI = {
     register: (data) => api.post('/auth/register', data),
     login: (data) => api.post('/auth/login', data),
+    me: () => api.get('/auth/me'),
 };
 
 export const filesAPI = {
     list: (parentId = null) => {
         const params = {};
+        if (parentId !== null) params.parent_id = parentId;
+        return api.get('/files/', { params });
+    },
+    listPaginated: (parentId = null, limit = 50, offset = 0) => {
+        const params = { limit, offset };
         if (parentId !== null) params.parent_id = parentId;
         return api.get('/files/', { params });
     },
@@ -83,12 +89,21 @@ export const filesAPI = {
     editorConfig: (fileId) => api.get(`/files/editor-config/${fileId}`),
     tree: () => api.get('/files/tree'),
     folderPreview: (folderId) => api.get(`/files/folder-preview/${folderId}`),
+    search: (query, { parentId = null, includeTrashed = false, limit = 25, offset = 0 } = {}) => {
+        const params = { q: query, include_trashed: includeTrashed, limit, offset };
+        if (parentId !== null) params.parent_id = parentId;
+        return api.get('/files/search', { params });
+    },
     createDocument: (name, docType, parentId = null) =>
         api.post('/files/create-document', { name, doc_type: docType, parent_id: parentId }),
     extractZip: (fileId) => api.post(`/files/extract/${fileId}`),
     storage: () => api.get('/files/storage'),
     getContent: (fileId) => api.get(`/files/content/${fileId}`),
     saveContent: (fileId, content) => api.put(`/files/content/${fileId}`, { content }),
+    trash: () => api.get('/files/trash'),
+    trashPaginated: (limit = 50, offset = 0) => api.get('/files/trash', { params: { limit, offset } }),
+    restoreFromTrash: (fileId) => api.post(`/files/trash/restore/${fileId}`),
+    emptyTrash: () => api.delete('/files/trash/empty'),
 };
 
 export const sharesAPI = {
@@ -103,3 +118,11 @@ export const sharesAPI = {
 };
 
 export default api;
+
+
+export const adminAPI = {
+    users: () => api.get('/admin/users'),
+    updateUserStorage: (userId, storageLimit) => api.patch(`/admin/users/${userId}/storage`, { storage_limit: storageLimit }),
+    updateAdminProfile: (payload) => api.patch('/admin/settings/profile', payload),
+    updateAdminPassword: (payload) => api.patch('/admin/settings/password', payload),
+};

@@ -9,6 +9,7 @@ import { common, createLowlight } from 'lowlight';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { sharesAPI } from '../utils/api';
 import { File } from 'lucide-react';
+import Loader from './Loader';
 
 const lowlight = createLowlight(common);
 
@@ -86,7 +87,7 @@ export default function MarkdownViewer({ token, fileInfo }) {
     if (loading) {
         return (
             <div className="flex items-center justify-center p-12 text-[var(--text-secondary)]">
-                <div className="w-6 h-6 border-2 border-[var(--accent)] rounded-full animate-spin mr-3" />
+                <Loader className="scale-50 mr-2" />
                 Loading content...
             </div>
         );

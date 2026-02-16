@@ -16,11 +16,15 @@ except ImportError:
     from models import File as FileModel, User
     from auth.utils import decode_access_token
     from storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 import uuid
 import datetime
 import os
+
+TEMP_BUCKET_NAME = os.getenv("TEMP_BUCKET_NAME", f"{BUCKET_NAME}-trash")
+TRASH_RETENTION_DAYS = 30
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -51,17 +55,41 @@ class FileRename(BaseModel):
 @router.get("/")
 def list_files(
     parent_id: Optional[int] = Query(default=None),
+    limit: Optional[int] = Query(default=None, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = db.query(FileModel).filter(FileModel.user_id == current_user.id)
+    query = db.query(FileModel).filter(
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False,
+    )
     if parent_id is not None:
         query = query.filter(FileModel.parent_id == parent_id)
     else:
         query = query.filter(FileModel.parent_id == None)
-    
-    files = query.all()
-    return [
+
+    query = query.order_by(FileModel.is_folder.desc(), FileModel.created_at.desc())
+
+    if limit is None:
+        files = query.all()
+        return [
+            {
+                "id": f.id,
+                "name": f.name,
+                "size": f.size,
+                "mime_type": f.mime_type,
+                "s3_key": f.s3_key,
+                "is_folder": f.is_folder,
+                "parent_id": f.parent_id,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+            }
+            for f in files
+        ]
+
+    total = query.count()
+    files = query.offset(offset).limit(limit).all()
+    items = [
         {
             "id": f.id,
             "name": f.name,
@@ -74,6 +102,59 @@ def list_files(
         }
         for f in files
     ]
+    return {
+        "items": items,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(items) < total,
+    }
+
+
+@router.get("/search")
+def search_files(
+    q: str = Query(default=""),
+    parent_id: Optional[int] = Query(default=None),
+    include_trashed: bool = Query(default=False),
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    query = db.query(FileModel).filter(FileModel.user_id == current_user.id)
+    query = query.filter(FileModel.is_trashed == include_trashed)
+
+    if parent_id is not None:
+        query = query.filter(FileModel.parent_id == parent_id)
+
+    if q.strip():
+        query = query.filter(FileModel.name.ilike(f"%{q.strip()}%"))
+
+    query = query.order_by(FileModel.is_folder.desc(), FileModel.created_at.desc())
+    total = query.count()
+    rows = query.offset(offset).limit(limit).all()
+
+    items = [
+        {
+            "id": f.id,
+            "name": f.name,
+            "size": f.size,
+            "mime_type": f.mime_type,
+            "s3_key": f.s3_key,
+            "is_folder": f.is_folder,
+            "parent_id": f.parent_id,
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+        }
+        for f in rows
+    ]
+
+    return {
+        "items": items,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "has_more": offset + len(items) < total,
+    }
 
 
 @router.post("/upload")
@@ -351,43 +432,157 @@ def delete_file(
 ):
     file = db.query(FileModel).filter(
         FileModel.id == file_id,
-        FileModel.user_id == current_user.id
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False,
     ).first()
-    
+
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
-    
-    # Delete from S3 if it's a file
-    if not file.is_folder and file.s3_key:
+
+    trashed_at = datetime.datetime.utcnow()
+    _trash_item(file, current_user.username, trashed_at, db)
+    db.commit()
+    return {"message": "Moved to trash"}
+
+
+def _move_to_temp_bucket(s3_key: str, username: str):
+    trash_key = f"trash/{username}/{uuid.uuid4()}-{os.path.basename(s3_key)}"
+    try:
+        s3_client.copy_object(
+            Bucket=TEMP_BUCKET_NAME,
+            CopySource={"Bucket": BUCKET_NAME, "Key": s3_key},
+            Key=trash_key,
+        )
+    except Exception:
+        # fallback to same bucket namespace
+        trash_key = f"trash-temp/{username}/{uuid.uuid4()}-{os.path.basename(s3_key)}"
+        s3_client.copy_object(
+            Bucket=BUCKET_NAME,
+            CopySource={"Bucket": BUCKET_NAME, "Key": s3_key},
+            Key=trash_key,
+        )
+    try:
+        s3_client.delete_object(Bucket=BUCKET_NAME, Key=s3_key)
+    except Exception:
+        pass
+    return trash_key
+
+
+def _trash_item(file: FileModel, username: str, trashed_at: datetime.datetime, db: Session):
+    if file.is_folder:
+        children = db.query(FileModel).filter(
+            FileModel.parent_id == file.id,
+            FileModel.user_id == file.user_id,
+            FileModel.is_trashed == False,
+        ).all()
+        for child in children:
+            _trash_item(child, username, trashed_at, db)
+
+    if (not file.is_folder) and file.s3_key:
         try:
-            s3_client.delete_object(Bucket=BUCKET_NAME, Key=file.s3_key)
+            file.s3_key = _move_to_temp_bucket(file.s3_key, username)
         except Exception:
             pass
-    
-    # If it's a folder, also delete children recursively
-    if file.is_folder:
-        _delete_folder_contents(file.id, current_user.id, db)
-    
-    db.delete(file)
+
+    file.original_parent_id = file.parent_id
+    file.parent_id = None
+    file.is_trashed = True
+    file.trashed_at = trashed_at
+
+
+@router.get('/trash')
+def list_trash(
+    limit: Optional[int] = Query(default=None, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    query = db.query(FileModel).filter(
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == True,
+    ).order_by(FileModel.trashed_at.desc())
+
+    if limit is None:
+        files = query.all()
+        return [
+            {
+                "id": f.id,
+                "name": f.name,
+                "size": f.size,
+                "mime_type": f.mime_type,
+                "s3_key": f.s3_key,
+                "is_folder": f.is_folder,
+                "parent_id": f.parent_id,
+                "created_at": f.created_at.isoformat() if f.created_at else None,
+                "trashed_at": f.trashed_at.isoformat() if f.trashed_at else None,
+            }
+            for f in files
+        ]
+
+    total = query.count()
+    files = query.offset(offset).limit(limit).all()
+    items = [
+        {
+            "id": f.id,
+            "name": f.name,
+            "size": f.size,
+            "mime_type": f.mime_type,
+            "s3_key": f.s3_key,
+            "is_folder": f.is_folder,
+            "parent_id": f.parent_id,
+            "created_at": f.created_at.isoformat() if f.created_at else None,
+            "trashed_at": f.trashed_at.isoformat() if f.trashed_at else None,
+        }
+        for f in files
+    ]
+    return {"items": items, "total": total, "offset": offset, "limit": limit, "has_more": offset + len(items) < total}
+
+
+@router.post('/trash/restore/{file_id}')
+def restore_from_trash(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    file = db.query(FileModel).filter(
+        FileModel.id == file_id,
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == True,
+    ).first()
+    if not file:
+        raise HTTPException(status_code=404, detail='File not found in trash')
+
+    file.is_trashed = False
+    file.parent_id = file.original_parent_id
+    file.original_parent_id = None
+    file.trashed_at = None
     db.commit()
-    return {"message": "Deleted successfully"}
+    return {'message': 'Restored'}
 
 
-def _delete_folder_contents(folder_id, user_id, db):
-    children = db.query(FileModel).filter(
-        FileModel.parent_id == folder_id,
-        FileModel.user_id == user_id
+@router.delete('/trash/empty')
+def empty_trash(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    items = db.query(FileModel).filter(
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == True,
     ).all()
-    
-    for child in children:
-        if child.is_folder:
-            _delete_folder_contents(child.id, user_id, db)
-        elif child.s3_key:
+    deleted = 0
+    for item in items:
+        if (not item.is_folder) and item.s3_key:
             try:
-                s3_client.delete_object(Bucket=BUCKET_NAME, Key=child.s3_key)
+                s3_client.delete_object(Bucket=TEMP_BUCKET_NAME, Key=item.s3_key)
             except Exception:
-                pass
-        db.delete(child)
+                try:
+                    s3_client.delete_object(Bucket=BUCKET_NAME, Key=item.s3_key)
+                except Exception:
+                    pass
+        db.delete(item)
+        deleted += 1
+    db.commit()
+    return {"message": "Trash emptied", "deleted": deleted}
 
 
 @router.patch("/{file_id}")
@@ -834,8 +1029,11 @@ def get_storage_usage(
     current_user: User = Depends(get_current_user)
 ):
     from sqlalchemy import func
-    total_size = db.query(func.sum(FileModel.size)).filter(FileModel.user_id == current_user.id).scalar() or 0
+    total_size = db.query(func.sum(FileModel.size)).filter(
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False,
+    ).scalar() or 0
     return {
         "used": total_size,
-        "total": 2 * 1024 * 1024 * 1024  # 2 GB limit for now
+        "total": current_user.storage_limit or (2 * 1024 * 1024 * 1024)
     }
