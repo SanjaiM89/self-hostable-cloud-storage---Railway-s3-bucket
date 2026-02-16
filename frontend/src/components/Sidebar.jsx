@@ -116,7 +116,6 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, col
 
                 <div className="px-3 py-2 border-t border-[var(--sidebar-border)]">
                     <button onClick={onOpenTrash} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Trash2 className="w-4 h-4" />Trash</button>
-                    <button onClick={() => navigate('/settings')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Settings className="w-4 h-4" />Settings</button>
                     {user?.is_admin && (
                         <button onClick={() => navigate('/admin')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Shield className="w-4 h-4" />Admin</button>
                     )}
