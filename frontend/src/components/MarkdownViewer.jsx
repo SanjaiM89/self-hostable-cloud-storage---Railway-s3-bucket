@@ -5,13 +5,13 @@ import Image from '@tiptap/extension-image';
 import Link from '@tiptap/extension-link';
 import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
-import { common, createLowlight } from 'lowlight';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+// import { common, createLowlight } from 'lowlight';
+// import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { sharesAPI } from '../utils/api';
 import { File } from 'lucide-react';
 import Loader from './Loader';
 
-const lowlight = createLowlight(common);
+// const lowlight = createLowlight(common);
 const FONT_SIZE_META_RE = /<!--\s*md-font-size:(\d+)\s*-->/;
 
 function parseMarkdownMeta(markdown = '') {
@@ -52,11 +52,11 @@ export default function MarkdownViewer({ token, fileInfo }) {
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
-                codeBlock: false,
+                codeBlock: true,
             }),
-            CodeBlockLowlight.configure({
-                lowlight,
-            }),
+            // CodeBlockLowlight.configure({
+            //     lowlight,
+            // }),
             Typography,
             CustomImage.configure({
                 inline: true,
