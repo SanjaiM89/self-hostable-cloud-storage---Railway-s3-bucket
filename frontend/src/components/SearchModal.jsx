@@ -28,7 +28,9 @@ export default function SearchModal({ open, onClose, currentFolder, includeTrash
       setLoading(true);
       try {
         const res = await filesAPI.search(query, { parentId: currentFolder, includeTrashed, limit: 30, offset: 0 });
-        setResults(res.data.items || []);
+        const searchPayload = res.data;
+        const parsed = Array.isArray(searchPayload) ? searchPayload : (searchPayload?.items || []);
+        setResults(parsed);
       } catch (e) {
         console.error('Search failed', e);
       } finally {

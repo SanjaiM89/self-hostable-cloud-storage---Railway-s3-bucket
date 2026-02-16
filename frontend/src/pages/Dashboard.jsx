@@ -15,6 +15,17 @@ import { uploadFolder } from '../utils/folderUpload';
 import SearchModal from '../components/SearchModal';
 import Loader from '../components/Loader';
 
+
+function normalizeListResponse(payload) {
+    if (Array.isArray(payload)) {
+        return { items: payload, hasMore: false };
+    }
+    if (payload && Array.isArray(payload.items)) {
+        return { items: payload.items, hasMore: Boolean(payload.has_more) };
+    }
+    return { items: [], hasMore: false };
+}
+
 export default function Dashboard() {
     const [files, setFiles] = useState([]);
     const [currentFolder, setCurrentFolder] = useState(null);
@@ -52,16 +63,16 @@ export default function Dashboard() {
                 ? await filesAPI.trashPaginated(pageSize, 0)
                 : await filesAPI.listPaginated(currentFolder, pageSize, 0);
 
-            const firstItems = firstRes?.data?.items || [];
-            setFiles(firstItems);
+            const firstBatch = normalizeListResponse(firstRes?.data);
+            setFiles(firstBatch.items);
             setHasLoadedOnce(true);
 
-            if (firstRes?.data?.has_more) {
+            if (firstBatch.hasMore) {
                 const secondRes = viewScope === 'trash'
                     ? await filesAPI.trashPaginated(pageSize, pageSize)
                     : await filesAPI.listPaginated(currentFolder, pageSize, pageSize);
-                const secondItems = secondRes?.data?.items || [];
-                setFiles((prev) => [...prev, ...secondItems]);
+                const secondBatch = normalizeListResponse(secondRes?.data);
+                setFiles((prev) => [...prev, ...secondBatch.items]);
             }
         } catch (err) {
             console.error('Failed to fetch files:', err);
