@@ -1,15 +1,23 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
 
 const WebSocketContext = createContext(null);
 
+const MAX_RETRIES = 3;
+const BASE_DELAY = 3000; // 3 seconds
+
 export const WebSocketProvider = ({ children }) => {
     const { isAuthenticated, user } = useAuth();
     const ws = useRef(null);
-    const [status, setStatus] = useState('disconnected'); // disconnected, connecting, connected
+    const retryCount = useRef(0);
+    const retryTimer = useRef(null);
+    const isMounted = useRef(true);
+    const [status, setStatus] = useState('disconnected');
     const subscribers = useRef([]);
 
     useEffect(() => {
+        isMounted.current = true;
+
         if (!isAuthenticated || !user) {
             if (ws.current) {
                 ws.current.close();
@@ -20,72 +28,79 @@ export const WebSocketProvider = ({ children }) => {
         }
 
         const connect = () => {
+            if (!isMounted.current) return;
             if (ws.current?.readyState === WebSocket.OPEN) return;
+            if (retryCount.current >= MAX_RETRIES) {
+                console.log('WS: Max retries reached, giving up.');
+                setStatus('disconnected');
+                return;
+            }
 
             setStatus('connecting');
-            // Assuming backend is same host or configured env
-            // Determine WS URL
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            // If development (Vite default proxy), we might need direct backend URL or use relative /api path if proxied
-            // Assuming /api proxy setup or direct backend URL. 
-            // backend/main.py has /ws endpoint.
-
-            // NOTE: You might need to adjust this URL based on your dev setup
-            // If using Vite proxy: `ws://${window.location.host}/ws` (if proxy forwards ws)
-            // Or typically `ws://localhost:8000/ws`
-
-            // Trying to use relative path if proxy expects it, or absolute if we know backend port
-            // Let's assume common default: 
             const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
             const wsBase = backendUrl.replace(/^http/, 'ws');
 
-            const socket = new WebSocket(`${wsBase}/ws/${user.username}`);
+            try {
+                const socket = new WebSocket(`${wsBase}/ws/${user.username}`);
 
-            socket.onopen = () => {
-                console.log('WS Connected');
-                setStatus('connected');
-            };
+                socket.onopen = () => {
+                    if (!isMounted.current) { socket.close(); return; }
+                    console.log('WS Connected');
+                    retryCount.current = 0;
+                    setStatus('connected');
+                };
 
-            socket.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    // Notify subscribers
-                    subscribers.current.forEach(callback => callback(data));
-                } catch (e) {
-                    console.error('WS Message Parse Error', e);
-                }
-            };
+                socket.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        subscribers.current.forEach(callback => callback(data));
+                    } catch (e) {
+                        // Ignore parse errors
+                    }
+                };
 
-            socket.onclose = () => {
-                console.log('WS Disconnected');
+                socket.onclose = () => {
+                    if (!isMounted.current) return;
+                    setStatus('disconnected');
+                    ws.current = null;
+                    retryCount.current += 1;
+                    if (retryCount.current < MAX_RETRIES) {
+                        const delay = BASE_DELAY * Math.pow(2, retryCount.current - 1);
+                        retryTimer.current = setTimeout(connect, delay);
+                    }
+                };
+
+                socket.onerror = () => {
+                    // onclose will fire after onerror, so just let it propagate
+                    socket.close();
+                };
+
+                ws.current = socket;
+            } catch (e) {
+                // WebSocket constructor can throw if URL is invalid
+                console.warn('WS: Failed to create connection', e);
                 setStatus('disconnected');
-                // Reconnect logic could go here (exp. backoff)
-                setTimeout(connect, 3000);
-            };
-
-            socket.onerror = (err) => {
-                console.error('WS Error', err);
-                socket.close();
-            };
-
-            ws.current = socket;
+            }
         };
 
         connect();
 
         return () => {
+            isMounted.current = false;
+            clearTimeout(retryTimer.current);
             if (ws.current) {
                 ws.current.close();
+                ws.current = null;
             }
         };
     }, [isAuthenticated, user]);
 
-    const subscribe = (callback) => {
+    const subscribe = useCallback((callback) => {
         subscribers.current.push(callback);
         return () => {
             subscribers.current = subscribers.current.filter(cb => cb !== callback);
         };
-    };
+    }, []);
 
     return (
         <WebSocketContext.Provider value={{ status, subscribe }}>

@@ -176,13 +176,9 @@ export default function MarkdownEditor({ file, onClose }) {
                 placeholder: 'Start writing...',
             }),
             Markdown.configure({
-                html: true, // Allow HTML to support saving resized images
+                html: true,
                 transformPastedText: true,
                 transformCopiedText: true,
-                transform: {
-                    // Start with default transformation
-                    ...Markdown.default?.transform,
-                }
             }),
         ],
         editorProps: {
