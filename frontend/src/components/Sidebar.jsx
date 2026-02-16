@@ -66,7 +66,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, col
                 <button className="icon-rail-btn" onClick={() => {}}><Sparkles className="w-4 h-4" /></button>
                 <div className="mt-auto" />
                 <button className="icon-rail-btn" onClick={onToggleCollapse}><PanelLeftClose className="w-4 h-4" /></button>
-                <button className="icon-rail-btn"><Settings className="w-4 h-4" /></button>
+                <button className="icon-rail-btn" onClick={() => navigate('/settings')}><Settings className="w-4 h-4" /></button>
                 <div className="w-9 h-9 rounded-full bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)] text-sm font-semibold flex items-center justify-center">
                     {user?.username?.[0]?.toUpperCase() || 'S'}
                 </div>
@@ -116,6 +116,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, col
 
                 <div className="px-3 py-2 border-t border-[var(--sidebar-border)]">
                     <button onClick={onOpenTrash} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Trash2 className="w-4 h-4" />Trash</button>
+                    <button onClick={() => navigate('/settings')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Settings className="w-4 h-4" />Settings</button>
                     {user?.is_admin && (
                         <button onClick={() => navigate('/admin')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Shield className="w-4 h-4" />Admin</button>
                     )}

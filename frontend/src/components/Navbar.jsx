@@ -1,9 +1,8 @@
 import { useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
-import { useAuth } from '../context/AuthContext';
 import {
     Search, Grid3x3, List, Upload, FolderUp, Sun, Moon, ChevronRight,
-    LogOut, Home, Activity, ArrowLeft
+    Home, Activity, ArrowLeft
 } from 'lucide-react';
 
 export default function Navbar({
@@ -21,7 +20,6 @@ export default function Navbar({
     onOpenSearch,
 }) {
     const { isDark, toggleTheme } = useTheme();
-    const { user, logout } = useAuth();
     const fileInputRef = useRef(null);
     const folderInputRef = useRef(null);
 
@@ -155,19 +153,6 @@ export default function Navbar({
                 {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
 
-            {/* User avatar / Logout */}
-            <div className="flex items-center gap-1.5 md:gap-2">
-                <div className="w-7 h-7 rounded-full bg-[var(--accent)] flex items-center justify-center text-white text-[12px] font-semibold">
-                    {user?.username?.[0]?.toUpperCase() || 'U'}
-                </div>
-                <button
-                    onClick={logout}
-                    className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--danger)] hover:bg-[var(--bg-secondary)] transition-colors"
-                    title="Logout"
-                >
-                    <LogOut className="w-4 h-4" />
-                </button>
-            </div>
         </header>
     );
 }

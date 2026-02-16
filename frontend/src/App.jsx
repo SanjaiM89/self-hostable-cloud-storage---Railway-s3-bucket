@@ -10,6 +10,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const EditorPage = lazy(() => import('./pages/EditorPage'));
 const SharedFilePage = lazy(() => import('./pages/SharedFilePage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 function LoadingFallback() {
   return (
@@ -80,6 +81,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <AdminPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings"
+                element={
+                  <ProtectedRoute>
+                    <SettingsPage />
                   </ProtectedRoute>
                 }
               />
