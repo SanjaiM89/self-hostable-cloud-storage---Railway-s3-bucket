@@ -11,13 +11,13 @@ try:
     from ..models import File as FileModel, User
     from ..auth.utils import decode_access_token
     from .storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
-    from ..websockets import manager
+    from ..ws_manager import manager
 except ImportError:
     from database import get_db
     from models import File as FileModel, User
     from auth.utils import decode_access_token
     from storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
-    from websockets import manager
+    from ws_manager import manager
 
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
