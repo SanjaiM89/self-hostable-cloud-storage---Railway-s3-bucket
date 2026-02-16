@@ -5,8 +5,8 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
-import { common, createLowlight } from 'lowlight';
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+// import { common, createLowlight } from 'lowlight';
+// import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { filesAPI } from '../utils/api';
 import Loader from './Loader';
 import {
@@ -155,18 +155,18 @@ export default function MarkdownEditor({ file, onClose }) {
 
     // Tiptap Editor Setup
     // Initialize lowlight safely prevents ReferenceError
-    const lowlightExtension = useMemo(() => {
-        const ll = createLowlight(common);
-        return CodeBlockLowlight.configure({ lowlight: ll });
-    }, []);
+    // const lowlightExtension = useMemo(() => {
+    //     const ll = createLowlight(common);
+    //     return CodeBlockLowlight.configure({ lowlight: ll });
+    // }, []);
 
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
-                codeBlock: false, // Disable default codeBlock to use lowlight
+                codeBlock: true, // Enable default codeBlock
             }),
-            lowlightExtension,
+            // lowlightExtension,
             Typography,
             CustomImage.configure({
                 inline: true,

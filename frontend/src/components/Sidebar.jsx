@@ -3,10 +3,10 @@ import { Home, Trash2, Settings, Plus, Search, HardDrive, Shield, PanelLeftClose
 import { useNavigate } from 'react-router-dom';
 import { filesAPI } from '../utils/api';
 import { Tree } from './ui/file-tree';
+import InputModal from './InputModal';
 
 export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onUpload, onCreateDocument, collapsed, onToggleCollapse, onOpenTrash, onOpenSearch }) {
-    const [showNewFolder, setShowNewFolder] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
+    const [inputModal, setInputModal] = useState(null);
     const [quickOpen, setQuickOpen] = useState(false);
     const [storage, setStorage] = useState({ used: 0, total: 2 * 1024 * 1024 * 1024 });
     const [folderTree, setFolderTree] = useState([]);
@@ -15,7 +15,6 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
         return Number.isFinite(saved) ? Math.min(460, Math.max(260, saved)) : 302;
     });
     const resizingRef = useRef(false);
-    const inputRef = useRef(null);
     const quickUploadRef = useRef(null);
     const navigate = useNavigate();
     const user = useMemo(() => JSON.parse(localStorage.getItem('user') || 'null'), []);
@@ -39,7 +38,6 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
     };
 
     useEffect(() => { fetchTree(); }, [currentFolder]);
-    useEffect(() => { if (showNewFolder && inputRef.current) inputRef.current.focus(); }, [showNewFolder]);
 
     useEffect(() => {
         const onMove = (e) => {
@@ -57,13 +55,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
         };
     }, []);
 
-    const handleCreateFolder = () => {
-        if (!newFolderName.trim()) return;
-        onCreateFolder(newFolderName.trim());
-        setNewFolderName('');
-        setShowNewFolder(false);
-        setTimeout(fetchTree, 300);
-    };
+
 
 
 
@@ -75,10 +67,45 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
     };
 
     const quickCreate = (docType, fallbackName) => {
-        const name = window.prompt('Enter name:', fallbackName);
-        if (name && name.trim()) {
-            onCreateDocument?.(name.trim(), docType);
-        }
+        const titles = {
+            'writer': 'Create Writer Document',
+            'spreadsheet': 'Create Spreadsheet',
+            'presentation': 'Create Presentation',
+            'markdown': 'Create Markdown File',
+        };
+        const placeholders = {
+            'writer': 'Document name',
+            'spreadsheet': 'Spreadsheet name',
+            'presentation': 'Presentation name',
+            'markdown': 'File name',
+        };
+
+        setInputModal({
+            title: titles[docType],
+            placeholder: placeholders[docType],
+            defaultValue: fallbackName,
+            onConfirm: (name) => {
+                setInputModal(null);
+                onCreateDocument?.(name.trim(), docType);
+                setTimeout(fetchTree, 500);
+            },
+            onCancel: () => setInputModal(null)
+        });
+        setQuickOpen(false);
+    };
+
+    const openNewFolderModal = () => {
+        setInputModal({
+            title: 'Create New Folder',
+            placeholder: 'Folder name',
+            defaultValue: '',
+            onConfirm: (name) => {
+                setInputModal(null);
+                onCreateFolder(name);
+                setTimeout(fetchTree, 500);
+            },
+            onCancel: () => setInputModal(null)
+        });
         setQuickOpen(false);
     };
 
@@ -115,7 +142,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                         <button onClick={() => quickCreate('writer', 'Untitled Document')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><FileText className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Writer</button>
                         <button onClick={() => quickCreate('spreadsheet', 'Untitled Spreadsheet')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Sheet className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Spreadsheet</button>
                         <button onClick={() => quickCreate('presentation', 'Untitled Presentation')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><MonitorPlay className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New PPT</button>
-                        <button onClick={() => { setShowNewFolder(true); setQuickOpen(false); }} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Plus className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Folder</button>
+                        <button onClick={openNewFolderModal} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Plus className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Folder</button>
                         <button onClick={() => quickCreate('markdown', 'Untitled')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Code className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Markdown</button>
                     </div>
                 )}
@@ -142,14 +169,10 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 <div className="flex-1 overflow-y-auto px-3 py-1">
                     <div className="flex items-center justify-between mb-1 px-2">
                         <span className="text-[11px] font-medium uppercase tracking-wider text-[var(--sidebar-text)] opacity-60">Folders</span>
-                        <button onClick={() => setShowNewFolder(true)} className="p-0.5 rounded hover:bg-[var(--sidebar-hover)] text-[var(--sidebar-text)]"><Plus className="w-3.5 h-3.5 app-icon-solid" strokeWidth={2.35} /></button>
+                        <button onClick={openNewFolderModal} className="p-0.5 rounded hover:bg-[var(--sidebar-hover)] text-[var(--sidebar-text)]"><Plus className="w-3.5 h-3.5 app-icon-solid" strokeWidth={2.35} /></button>
                     </div>
 
-                    {showNewFolder && (
-                        <div className="flex items-center gap-1.5 pl-2 pr-1 mb-2">
-                            <input ref={inputRef} value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') handleCreateFolder(); if (e.key === 'Escape') setShowNewFolder(false); }} placeholder="Folder name" className="flex-1 bg-transparent border-b border-[var(--sidebar-accent)] text-[13px] text-[var(--sidebar-text-active)] py-1 outline-none" />
-                        </div>
-                    )}
+
 
                     <Tree
                         className="bg-transparent rounded-md p-1"
@@ -180,6 +203,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 <span className="mx-auto my-2 block w-1 h-10 rounded-full bg-[var(--sidebar-border)] opacity-60" />
                 <GripVertical className="mx-auto w-3 h-3 text-[var(--sidebar-text)] opacity-70" strokeWidth={2.3} />
             </button>
+            {inputModal && <InputModal {...inputModal} />}
         </aside>
     );
 }
