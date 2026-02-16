@@ -81,6 +81,7 @@ except Exception as e:
 app = FastAPI(title="Cloud Storage API")
 
 origins = [
+    "*",
     "http://localhost:5173",
     "http://localhost:3000",
     "https://self-hostable-cloud-storage-railway-flax.vercel.app",
