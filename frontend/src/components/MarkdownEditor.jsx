@@ -5,8 +5,6 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
-// import { common, createLowlight } from 'lowlight';
-// import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { filesAPI } from '../utils/api';
 import Loader from './Loader';
 import {
@@ -15,10 +13,6 @@ import {
     Quote, Code, Image as ImageIcon, Link as LinkIcon,
     Undo, Redo
 } from 'lucide-react';
-
-// Initialize lowlight with common languages
-// Initialize lowlight with common languages - MOVED INSIDE COMPONENT TO AVOID REFERENCE_ERROR
-// const lowlight = createLowlight(common);
 
 const FONT_SIZE_STORAGE_KEY = 'md_font_size_preference_v1';
 const PENDING_UPLOAD_STORAGE_KEY = 'md_pending_uploads_v1';
@@ -35,7 +29,6 @@ function withMarkdownMeta(markdown = '', fontSize = 18) {
     const clean = markdown.replace(FONT_SIZE_META_RE, '').trimStart();
     return `<!-- md-font-size:${fontSize} -->\n${clean}`;
 }
-
 
 const CustomImage = Image.extend({
     addAttributes() {
@@ -68,9 +61,12 @@ export default function MarkdownEditor({ file, onClose }) {
         const saved = Number(localStorage.getItem(FONT_SIZE_STORAGE_KEY));
         return Number.isFinite(saved) && saved >= 14 && saved <= 26 ? saved : 18;
     });
+
     const pendingUploadsRef = useRef({});
     const saveTimerRef = useRef(null);
+    const editorRef = useRef(null); // Ref to access editor inside callbacks that are defined before editor
 
+    // 1. Helpers that don't depend on editor
     const persistPendingUploads = useCallback(() => {
         localStorage.setItem(PENDING_UPLOAD_STORAGE_KEY, JSON.stringify(Object.values(pendingUploadsRef.current)));
     }, []);
@@ -82,8 +78,51 @@ export default function MarkdownEditor({ file, onClose }) {
         reader.readAsDataURL(imgFile);
     }), []);
 
+    // 2. Save Content (needed by useEditor onUpdate)
+    const saveContent = useCallback(async (text) => {
+        setSaveStatus('saving');
+        try {
+            const contentWithMeta = withMarkdownMeta(text, fontSize);
+
+            // Optimistic update to SessionStorage
+            try {
+                sessionStorage.setItem(`file_content_${file.id}`, contentWithMeta);
+            } catch (e) { /* ignore quota */ }
+
+            await filesAPI.saveContent(file.id, contentWithMeta);
+            localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
+            setSaveStatus('saved');
+            setOriginalContent(contentWithMeta);
+        } catch (err) {
+            console.error('Save failed:', err);
+            setSaveStatus('error');
+        }
+    }, [file.id, fontSize]);
+
+    // 3. Image Upload Helper (dependent on API only)
+    const uploadImage = useCallback(async (file) => {
+        try {
+            setSaveStatus('saving');
+            const formData = new FormData();
+            formData.append('file', file);
+            const result = await filesAPI.upload(formData);
+            const fileData = result.data;
+
+            // Get download URL for the uploaded image
+            const dlRes = await filesAPI.download(fileData.id);
+            return dlRes.data.url;
+        } catch (err) {
+            console.error('Image upload failed:', err);
+            setSaveStatus('error');
+            return null;
+        }
+    }, []);
+
+    // 4. Callbacks that rely on editorRef (to avoid circular dependency/TDZ)
     const replaceUploadedImage = useCallback((uploadId, remoteUrl) => {
+        const editor = editorRef.current;
         if (!editor) return;
+
         let tr = editor.state.tr;
         let changed = false;
         editor.state.doc.descendants((node, pos) => {
@@ -95,10 +134,12 @@ export default function MarkdownEditor({ file, onClose }) {
         if (changed) {
             editor.view.dispatch(tr);
         }
-    }, [editor]);
+    }, []);
 
     const enqueueImageUpload = useCallback(async (imgFile, insertAtPos = null) => {
+        const editor = editorRef.current;
         if (!editor || !imgFile) return;
+
         const uploadId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const previewSrc = await fileToDataUrl(imgFile);
 
@@ -132,41 +173,15 @@ export default function MarkdownEditor({ file, onClose }) {
             delete pendingUploadsRef.current[uploadId];
             persistPendingUploads();
         });
-    }, [editor, fileToDataUrl, persistPendingUploads, replaceUploadedImage]);
+    }, [fileToDataUrl, persistPendingUploads, replaceUploadedImage, uploadImage, saveContent]);
 
-    // Image upload helper
-    const uploadImage = useCallback(async (file) => {
-        try {
-            setSaveStatus('saving');
-            const formData = new FormData();
-            formData.append('file', file);
-            const result = await filesAPI.upload(formData);
-            const fileData = result.data;
-
-            // Get download URL for the uploaded image
-            const dlRes = await filesAPI.download(fileData.id);
-            return dlRes.data.url;
-        } catch (err) {
-            console.error('Image upload failed:', err);
-            setSaveStatus('error');
-            return null;
-        }
-    }, []);
-
-    // Tiptap Editor Setup
-    // Initialize lowlight safely prevents ReferenceError
-    // const lowlightExtension = useMemo(() => {
-    //     const ll = createLowlight(common);
-    //     return CodeBlockLowlight.configure({ lowlight: ll });
-    // }, []);
-
+    // 5. useEditor Hook
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
-                codeBlock: true, // Enable default codeBlock
+                codeBlock: true,
             }),
-            // lowlightExtension,
             Typography,
             CustomImage.configure({
                 inline: true,
@@ -222,26 +237,10 @@ export default function MarkdownEditor({ file, onClose }) {
         },
     });
 
-    // Save content
-    const saveContent = useCallback(async (text) => {
-        setSaveStatus('saving');
-        try {
-            const contentWithMeta = withMarkdownMeta(text, fontSize);
-
-            // Optimistic update to SessionStorage
-            try {
-                sessionStorage.setItem(`file_content_${file.id}`, contentWithMeta);
-            } catch (e) { /* ignore quota */ }
-
-            await filesAPI.saveContent(file.id, contentWithMeta);
-            localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
-            setSaveStatus('saved');
-            setOriginalContent(contentWithMeta);
-        } catch (err) {
-            console.error('Save failed:', err);
-            setSaveStatus('error');
-        }
-    }, [file.id, fontSize]);
+    // 6. Sync editorRef
+    useEffect(() => {
+        editorRef.current = editor;
+    }, [editor]);
 
     // Save on Ctrl+S
     useEffect(() => {
@@ -290,9 +289,6 @@ export default function MarkdownEditor({ file, onClose }) {
                     }
                     setOriginalContent(content);
                     if (editor) {
-                        // Only update editor if user hasn't started typing yet? 
-                        // For now, simplicity: update it (might lose 100ms of typing if very unlucky race)
-                        // Better: check if editor is empty or same as cache
                         const current = editor.storage.markdown.getMarkdown();
                         if (!cached || current === parseMarkdownMeta(cached).cleanContent) {
                             editor.commands.setContent(cleanContent);
@@ -307,7 +303,7 @@ export default function MarkdownEditor({ file, onClose }) {
             }
         };
         loadContent();
-    }, [file.id, editor]);
+    }, [file.id, editor]); // Editor dependency is safe as it's passed into effect
 
     // Save before closing
     const handleClose = useCallback(async () => {
@@ -506,7 +502,6 @@ export default function MarkdownEditor({ file, onClose }) {
                     color: var(--text-secondary);
                 }
                 
-                /* Boxed Code Blocks */
                 .ProseMirror pre { 
                     background: #1e1e2e; 
                     color: #cdd6f4;
@@ -536,16 +531,6 @@ export default function MarkdownEditor({ file, onClose }) {
                     font-size: inherit;
                 }
                 
-                /* Syntax Highlighting Colors (Catppuccin Macchiato inspired) */
-                .hljs-comment, .hljs-quote { color: #6c7086; font-style: italic; }
-                .hljs-variable, .hljs-template-variable, .hljs-attribute, .hljs-tag, .hljs-name, .hljs-regexp, .hljs-link, .hljs-name, .hljs-selector-id, .hljs-selector-class { color: #f38ba8; }
-                .hljs-number, .hljs-meta, .hljs-built_in, .hljs-builtin-name, .hljs-literal, .hljs-type, .hljs-params { color: #fab387; }
-                .hljs-string, .hljs-symbol, .hljs-bullet { color: #a6e3a1; }
-                .hljs-title, .hljs-section { color: #89b4fa; }
-                .hljs-keyword, .hljs-selector-tag { color: #cba6f7; }
-                .hljs-emphasis { font-style: italic; }
-                .hljs-strong { font-weight: bold; }
-
                 .ProseMirror img {
                     border-radius: 8px;
                     max-width: 100%;
