@@ -145,6 +145,10 @@ export const sharesAPI = {
     publicDownload: (token) => axios.get(`${API_URL}/shares/public/${token}/download`),
     publicEditorConfig: (token) => axios.get(`${API_URL}/shares/public/${token}/editor-config`),
     publicContent: (token) => axios.get(`${API_URL}/shares/public/${token}/content`),
+    // Folder sharing
+    publicContents: (token) => axios.get(`${API_URL}/shares/public/${token}/contents`),
+    publicDownloadFile: (token, fileId) => `${API_URL}/shares/public/${token}/download/${fileId}`,
+    publicDownloadZip: (token) => `${API_URL}/shares/public/${token}/zip`,
 };
 
 export default api;

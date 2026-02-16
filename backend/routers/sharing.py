@@ -5,6 +5,8 @@ from typing import Optional
 from pydantic import BaseModel
 import uuid
 import os
+import io
+import zipfile
 import datetime
 import jwt as pyjwt
 
@@ -339,3 +341,159 @@ def get_shared_content(token: str, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Error reading file content: {e}")
         raise HTTPException(status_code=500, detail="Could not read file content")
+
+
+# ─── Shared folder: list contents ───
+
+def _collect_children(db, folder_id, user_id):
+    """Recursively collect all non-trashed children of a folder."""
+    results = []
+    children = db.query(FileModel).filter(
+        FileModel.parent_id == folder_id,
+        FileModel.user_id == user_id,
+        FileModel.is_trashed == False,
+    ).order_by(FileModel.is_folder.desc(), FileModel.name).all()
+    for child in children:
+        item = {
+            "id": child.id,
+            "name": child.name,
+            "size": child.size or 0,
+            "mime_type": child.mime_type,
+            "is_folder": child.is_folder,
+            "parent_id": child.parent_id,
+            "created_at": str(child.created_at),
+        }
+        if child.is_folder:
+            item["children"] = _collect_children(db, child.id, user_id)
+        results.append(item)
+    return results
+
+
+@router.get("/public/{token}/contents")
+def get_shared_folder_contents(token: str, db: Session = Depends(get_db)):
+    """List all files inside a shared folder (recursive)."""
+    share = db.query(FileShare).filter(FileShare.share_token == token).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share link not found")
+
+    file = db.query(FileModel).filter(FileModel.id == share.file_id).first()
+    if not file:
+        raise HTTPException(status_code=404, detail="File no longer exists")
+    if not file.is_folder:
+        raise HTTPException(status_code=400, detail="Shared item is not a folder")
+
+    contents = _collect_children(db, file.id, file.user_id)
+    return {"folder_name": file.name, "contents": contents}
+
+
+# ─── Shared folder: download individual file ───
+
+def _is_descendant(db, file_id, ancestor_folder_id, user_id):
+    """Check if file_id is a descendant of ancestor_folder_id."""
+    current = db.query(FileModel).filter(
+        FileModel.id == file_id, FileModel.user_id == user_id
+    ).first()
+    while current:
+        if current.parent_id == ancestor_folder_id:
+            return True
+        if current.parent_id is None:
+            return False
+        current = db.query(FileModel).filter(
+            FileModel.id == current.parent_id, FileModel.user_id == user_id
+        ).first()
+    return False
+
+
+@router.get("/public/{token}/download/{file_id}")
+def download_shared_folder_file(token: str, file_id: int, db: Session = Depends(get_db)):
+    """Download a single file from inside a shared folder."""
+    share = db.query(FileShare).filter(FileShare.share_token == token).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share link not found")
+    if share.permission == "view":
+        raise HTTPException(status_code=403, detail="Download not allowed for this share")
+
+    shared_root = db.query(FileModel).filter(FileModel.id == share.file_id).first()
+    if not shared_root:
+        raise HTTPException(status_code=404, detail="Shared item not found")
+
+    # Verify the requested file is inside the shared folder
+    if file_id != shared_root.id and not _is_descendant(db, file_id, shared_root.id, shared_root.user_id):
+        raise HTTPException(status_code=403, detail="File is not part of this shared folder")
+
+    target = db.query(FileModel).filter(FileModel.id == file_id).first()
+    if not target or not target.s3_key:
+        raise HTTPException(status_code=404, detail="File not found or has no data")
+
+    try:
+        s3_response = s3_client.get_object(Bucket=BUCKET_NAME, Key=target.s3_key)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{target.name}"',
+            "Content-Length": str(target.size or 0),
+        }
+        return StreamingResponse(
+            s3_response['Body'],
+            media_type=target.mime_type or "application/octet-stream",
+            headers=headers,
+        )
+    except Exception as e:
+        print(f"Stream error: {e}")
+        raise HTTPException(status_code=500, detail="Could not stream file")
+
+
+# ─── Shared folder: download as ZIP ───
+
+def _collect_files_flat(db, folder_id, user_id, prefix=""):
+    """Collect all files in a folder tree as (s3_key, archive_path) pairs."""
+    result = []
+    children = db.query(FileModel).filter(
+        FileModel.parent_id == folder_id,
+        FileModel.user_id == user_id,
+        FileModel.is_trashed == False,
+    ).all()
+    for child in children:
+        path = f"{prefix}{child.name}" if prefix else child.name
+        if child.is_folder:
+            result.extend(_collect_files_flat(db, child.id, user_id, f"{path}/"))
+        elif child.s3_key:
+            result.append((child.s3_key, path))
+    return result
+
+
+@router.get("/public/{token}/zip")
+def download_shared_folder_zip(token: str, db: Session = Depends(get_db)):
+    """Download entire shared folder as a ZIP archive."""
+    share = db.query(FileShare).filter(FileShare.share_token == token).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share link not found")
+    if share.permission == "view":
+        raise HTTPException(status_code=403, detail="Download not allowed for this share")
+
+    folder = db.query(FileModel).filter(FileModel.id == share.file_id).first()
+    if not folder or not folder.is_folder:
+        raise HTTPException(status_code=400, detail="Shared item is not a folder")
+
+    file_entries = _collect_files_flat(db, folder.id, folder.user_id)
+    if not file_entries:
+        raise HTTPException(status_code=404, detail="Folder is empty")
+
+    # Build ZIP in memory (suitable for reasonable folder sizes)
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for s3_key, archive_path in file_entries:
+            try:
+                obj = s3_client.get_object(Bucket=BUCKET_NAME, Key=s3_key)
+                data = obj['Body'].read()
+                zf.writestr(archive_path, data)
+            except Exception as e:
+                print(f"Skipping {s3_key}: {e}")
+                continue
+
+    zip_buffer.seek(0)
+    zip_name = f"{folder.name}.zip"
+
+    return StreamingResponse(
+        zip_buffer,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
+    )

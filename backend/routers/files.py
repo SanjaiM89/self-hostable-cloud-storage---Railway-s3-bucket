@@ -190,11 +190,11 @@ async def upload_file(
         is_folder=False,
     )
     db.add(new_file)
+    db.commit()
     db.refresh(new_file)
     
     # Broadcast update
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": parent_id}))
+    await manager.broadcast({"type": "refresh", "folder_id": parent_id})
 
     return {
         "id": new_file.id,
@@ -251,7 +251,7 @@ class FileRegister(BaseModel):
     parent_id: Optional[int] = None
 
 @router.post("/register")
-def register_uploaded_file(
+async def register_uploaded_file(
     data: FileRegister,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -267,11 +267,11 @@ def register_uploaded_file(
         is_folder=False,
     )
     db.add(new_file)
+    db.commit()
     db.refresh(new_file)
     
     # Broadcast update
-    import asyncio
-    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": data.parent_id}))
+    await manager.broadcast({"type": "refresh", "folder_id": data.parent_id})
 
     return {
         "id": new_file.id,
