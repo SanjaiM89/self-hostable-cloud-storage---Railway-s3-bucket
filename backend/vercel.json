@@ -1,7 +1,6 @@
 {
     "env": {
-        "UVICORN_LOOP": "asyncio",
-        "UVICORN_WS": "websockets"
+        "UVICORN_LOOP": "asyncio"
     },
     "builds": [
         {
