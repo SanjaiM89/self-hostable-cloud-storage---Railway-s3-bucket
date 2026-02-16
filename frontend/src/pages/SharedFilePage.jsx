@@ -505,10 +505,10 @@ const sharedPageCSS = `
         --text-secondary: #9191a8;
         --text-tertiary: #5c5c73;
         --border-color: rgba(255,255,255,0.08);
-        --accent: #818cf8;
-        --accent-rgb: 129,140,248;
+        --accent: #34d399;
+        --accent-rgb: 52,211,153;
         --hover-bg: rgba(255,255,255,0.04);
-        --row-hover: rgba(129,140,248,0.06);
+        --row-hover: rgba(52,211,153,0.06);
     }
     .sf-page[data-theme="light"] {
         --bg-primary: #f8f9fc;
@@ -518,10 +518,10 @@ const sharedPageCSS = `
         --text-secondary: #6b7280;
         --text-tertiary: #9ca3af;
         --border-color: rgba(0,0,0,0.08);
-        --accent: #6366f1;
-        --accent-rgb: 99,102,241;
+        --accent: #40a02b;
+        --accent-rgb: 64,160,43;
         --hover-bg: rgba(0,0,0,0.03);
-        --row-hover: rgba(99,102,241,0.06);
+        --row-hover: rgba(64,160,43,0.06);
     }
     .sf-page {
         min-height: 100vh; background: var(--bg-primary); color: var(--text-primary);

@@ -577,7 +577,7 @@ const pdfViewerCSS = `
         background: transparent;
     }
     .pdf-thumb:hover { background: var(--bg-primary); }
-    .pdf-thumb-active { border-color: var(--accent); background: rgba(var(--accent-rgb, 99,102,241), 0.08); }
+    .pdf-thumb-active { border-color: var(--accent); background: rgba(var(--accent-rgb, 52,211,153), 0.08); }
     .pdf-thumb canvas { border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
 
     /* ═══ Main Viewer ═══ */
