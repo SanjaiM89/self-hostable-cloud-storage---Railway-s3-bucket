@@ -386,6 +386,37 @@ def get_shared_folder_contents(token: str, db: Session = Depends(get_db)):
     return {"folder_name": file.name, "contents": contents}
 
 
+# ─── Shared folder: presigned URL for viewing a file (PDF etc.) ───
+
+@router.get("/public/{token}/preview/{file_id}")
+def preview_shared_folder_file(token: str, file_id: int, db: Session = Depends(get_db)):
+    """Return a presigned URL for viewing a file inside a shared folder (or directly shared file)."""
+    share = db.query(FileShare).filter(FileShare.share_token == token).first()
+    if not share:
+        raise HTTPException(status_code=404, detail="Share link not found")
+
+    shared_root = db.query(FileModel).filter(FileModel.id == share.file_id).first()
+    if not shared_root:
+        raise HTTPException(status_code=404, detail="Shared item not found")
+
+    # If the shared item IS the file itself (not a folder), allow preview of that file
+    if shared_root.id == file_id:
+        target = shared_root
+    elif shared_root.is_folder and _is_descendant(db, file_id, shared_root.id, shared_root.user_id):
+        target = db.query(FileModel).filter(FileModel.id == file_id).first()
+    else:
+        raise HTTPException(status_code=403, detail="File is not part of this shared item")
+
+    if not target or not target.s3_key:
+        raise HTTPException(status_code=404, detail="File not found or has no data")
+
+    url = generate_presigned_url(target.s3_key)
+    if not url:
+        raise HTTPException(status_code=500, detail="Could not generate preview URL")
+
+    return {"url": url, "name": target.name, "mime_type": target.mime_type}
+
+
 # ─── Shared folder: download individual file ───
 
 def _is_descendant(db, file_id, ancestor_folder_id, user_id):

@@ -26,7 +26,7 @@ const DRAW_COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#000000'];
 const DRAW_WIDTHS = [1, 2, 3, 5, 8];
 
 // ─── PDF Viewer Component ───
-export default function PdfViewer({ file, fileUrl, onClose }) {
+export default function PdfViewer({ file, fileUrl, onClose, hideDownload = false }) {
     const [numPages, setNumPages] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const [scale, setScale] = useState(1.0);
@@ -260,20 +260,33 @@ export default function PdfViewer({ file, fileUrl, onClose }) {
         document.body.removeChild(a);
     };
 
-    // ─── Keyboard shortcuts ───
+    // ─── Keyboard + wheel shortcuts ───
     useEffect(() => {
         const handler = (e) => {
             if (e.ctrlKey || e.metaKey) {
                 if (e.key === 'f') { e.preventDefault(); setSearchOpen(true); }
                 if (e.key === 'p') { e.preventDefault(); handlePrint(); }
-                if (e.key === '=') { e.preventDefault(); zoomIn(); }
+                if (e.key === '=' || e.key === '+') { e.preventDefault(); zoomIn(); }
                 if (e.key === '-') { e.preventDefault(); zoomOut(); }
+                if (e.key === ' ') { e.preventDefault(); setScale(1.0); }
             }
             if (e.key === 'Escape') { setSearchOpen(false); setShowDrawColors(false); setShowHighlightColors(false); }
         };
+        const wheelHandler = (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (e.deltaY < 0) zoomIn();
+                else if (e.deltaY > 0) zoomOut();
+            }
+        };
         window.addEventListener('keydown', handler);
-        return () => window.removeEventListener('keydown', handler);
-    }, []);
+        const viewer = viewerRef.current;
+        if (viewer) viewer.addEventListener('wheel', wheelHandler, { passive: false });
+        return () => {
+            window.removeEventListener('keydown', handler);
+            if (viewer) viewer.removeEventListener('wheel', wheelHandler);
+        };
+    }, [scale]);
 
     // ─── Path helper ───
     const pointsToD = (points) => {
@@ -378,8 +391,8 @@ export default function PdfViewer({ file, fileUrl, onClose }) {
 
                 {/* Right actions */}
                 <button onClick={() => setSearchOpen(v => !v)} className={`pdf-tb ${searchOpen ? 'pdf-tb-active' : ''}`} title="Search (Ctrl+F)"><Search size={16} /></button>
-                <button onClick={handlePrint} className="pdf-tb" title="Print"><Printer size={16} /></button>
-                <button onClick={handleDownload} className="pdf-tb" title="Download"><Download size={16} /></button>
+                {!hideDownload && <button onClick={handlePrint} className="pdf-tb" title="Print"><Printer size={16} /></button>}
+                {!hideDownload && <button onClick={handleDownload} className="pdf-tb" title="Download"><Download size={16} /></button>}
             </div>
 
             {/* ═══ Search bar ═══ */}
@@ -570,9 +583,15 @@ const pdfViewerCSS = `
     /* ═══ Main Viewer ═══ */
     .pdf-main-viewer {
         flex: 1; overflow: auto; display: flex; flex-direction: column;
-        align-items: center; padding: 16px;
+        align-items: center; justify-content: flex-start;
+        padding: 16px; min-height: 0;
         background: var(--bg-secondary);
         gap: 16px;
+    }
+    .pdf-main-viewer > .react-pdf__Document {
+        display: flex; flex-direction: column;
+        align-items: center; gap: 16px;
+        width: 100%;
     }
 
     /* ═══ Page ═══ */

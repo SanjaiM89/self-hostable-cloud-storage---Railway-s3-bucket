@@ -4,10 +4,11 @@ import {
     Download, File, Lock, Folder, ChevronRight,
     Sun, Moon, FileText, Image, Film, Music,
     Archive, Code, Table, Database, FolderArchive,
-    ArrowLeft, ExternalLink,
+    ArrowLeft, ExternalLink, Eye,
 } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
 import MarkdownViewer from '../components/MarkdownViewer';
+import PdfViewer from '../components/PdfViewer';
 import Loader from '../components/Loader';
 
 // ─── File icon helper ───
@@ -51,6 +52,10 @@ function flatCount(items) {
     return count;
 }
 
+function isPdf(name) {
+    return name?.toLowerCase().endsWith('.pdf');
+}
+
 // ─── Main Component ───
 export default function SharedFilePage() {
     const { token } = useParams();
@@ -64,7 +69,12 @@ export default function SharedFilePage() {
     const editorContainerRef = useRef(null);
     const editorInstanceRef = useRef(null);
 
-    const editableExts = /\.(docx?|xlsx?|pptx?|odt|ods|odp|csv|txt|rtf|pdf)$/i;
+    // PDF preview state (for folder files or direct shares)
+    const [pdfPreview, setPdfPreview] = useState(null); // { file, url }
+    const [pdfLoading, setPdfLoading] = useState(false);
+
+    // PDFs handled separately now
+    const editableExts = /\.(docx?|xlsx?|pptx?|odt|ods|odp|csv|txt|rtf)$/i;
     const canDownload = fileInfo && fileInfo.permission !== 'view';
 
     // Persist dark mode
@@ -91,15 +101,21 @@ export default function SharedFilePage() {
                     console.error('Failed to load folder contents:', e);
                     setFolderContents([]);
                 }
-            } else {
-                // Non-folder: load editor config if applicable
-                if (editableExts.test(res.data.name)) {
-                    try {
-                        const cfgRes = await sharesAPI.publicEditorConfig(token);
-                        setEditorConfig(cfgRes.data);
-                    } catch (e) {
-                        console.error('Editor config not available:', e);
-                    }
+            } else if (isPdf(res.data.name)) {
+                // Directly shared PDF → load presigned URL for PDF viewer
+                try {
+                    const previewRes = await sharesAPI.publicPreview(token, res.data.file_id);
+                    setPdfPreview({ file: res.data, url: previewRes.data.url });
+                } catch (e) {
+                    console.error('Failed to load PDF preview:', e);
+                }
+            } else if (editableExts.test(res.data.name)) {
+                // OnlyOffice-compatible
+                try {
+                    const cfgRes = await sharesAPI.publicEditorConfig(token);
+                    setEditorConfig(cfgRes.data);
+                } catch (e) {
+                    console.error('Editor config not available:', e);
                 }
             }
         } catch (e) {
@@ -178,6 +194,28 @@ export default function SharedFilePage() {
         document.body.removeChild(a);
     };
 
+    // Open PDF from folder
+    const openPdfFromFolder = async (item) => {
+        setPdfLoading(true);
+        try {
+            const res = await sharesAPI.publicPreview(token, item.id);
+            setPdfPreview({ file: item, url: res.data.url });
+        } catch (e) {
+            console.error('Failed to load PDF:', e);
+        } finally {
+            setPdfLoading(false);
+        }
+    };
+
+    // Handle file click in folder browser
+    const handleFileClick = (item) => {
+        if (item.is_folder) {
+            navigateInto(item);
+        } else if (isPdf(item.name)) {
+            openPdfFromFolder(item);
+        }
+    };
+
     // Navigate into subfolder
     const navigateInto = (folder) => {
         setCurrentPath(prev => [...prev, { id: folder.id, name: folder.name, children: folder.children || [] }]);
@@ -230,7 +268,37 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── OnlyOffice Editor (for docs/spreadsheets) ───
+    // ─── PDF Viewer (direct share OR folder file) ───
+    if (pdfPreview) {
+        // If viewing from a folder, the PdfViewer's close goes back to folder.
+        // If direct PDF share, close shows the file card fallback.
+        const isFromFolder = fileInfo?.is_folder;
+        return (
+            <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
+                <div className="h-screen w-screen flex flex-col">
+                    <PdfViewer
+                        file={pdfPreview.file}
+                        fileUrl={pdfPreview.url}
+                        onClose={() => {
+                            if (isFromFolder) {
+                                setPdfPreview(null);
+                            } else {
+                                // Direct PDF share — just reset to show the card
+                                setPdfPreview(null);
+                            }
+                        }}
+                        hideDownload={!canDownload}
+                    />
+                </div>
+                <style>{sharedPageCSS}</style>
+            </div>
+        );
+    }
+
+    // ─── Directly shared PDF — auto-open in viewer (already handled above via pdfPreview state) ───
+    // If PDF preview failed to load, fall through to the file card below.
+
+    // ─── OnlyOffice Editor (for docs/spreadsheets, NOT pdfs) ───
     if (editorConfig && !fileInfo?.is_folder) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
@@ -281,6 +349,16 @@ export default function SharedFilePage() {
     if (fileInfo?.is_folder) {
         return (
             <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
+                {/* PDF loading overlay */}
+                {pdfLoading && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                        <div className="text-center">
+                            <Loader className="scale-75 mx-auto mb-2" />
+                            <span className="text-sm text-white">Loading PDF...</span>
+                        </div>
+                    </div>
+                )}
+
                 {/* Top bar */}
                 <div className="sf-topbar">
                     <FolderArchive className="w-5 h-5 text-[var(--accent)] mr-2" />
@@ -346,13 +424,18 @@ export default function SharedFilePage() {
                             {currentItems.map(item => (
                                 <div key={item.id}
                                     className="sf-table-row"
-                                    onClick={() => item.is_folder ? navigateInto(item) : null}
-                                    style={{ cursor: item.is_folder ? 'pointer' : 'default' }}
+                                    onClick={() => handleFileClick(item)}
+                                    style={{ cursor: (item.is_folder || isPdf(item.name)) ? 'pointer' : 'default' }}
                                 >
                                     <div className="sf-col-name">
                                         {getFileIcon(item)}
                                         <span className="truncate ml-2">{item.name}</span>
                                         {item.is_folder && <ChevronRight className="w-4 h-4 text-[var(--text-tertiary)] ml-auto" />}
+                                        {isPdf(item.name) && !item.is_folder && (
+                                            <span className="sf-preview-badge ml-auto">
+                                                <Eye className="w-3 h-3" /> View
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="sf-col-size text-[var(--text-secondary)]">
                                         {item.is_folder ? `${flatCount(item.children || [])} items` : formatSize(item.size)}
@@ -376,7 +459,7 @@ export default function SharedFilePage() {
         );
     }
 
-    // ─── Single File Card (non-editable) ───
+    // ─── Single File Card (non-editable, non-PDF) ───
     return (
         <div className="sf-page" data-theme={darkMode ? 'dark' : 'light'}>
             <div className="sf-topbar sf-topbar-fixed">
@@ -488,6 +571,14 @@ const sharedPageCSS = `
         font-size: 10px; padding: 1px 6px; border-radius: 4px;
         background: rgba(var(--accent-rgb),0.12); color: var(--accent);
         font-weight: 600;
+    }
+
+    /* Preview badge on PDF rows */
+    .sf-preview-badge {
+        display: inline-flex; align-items: center; gap: 3px;
+        font-size: 10px; padding: 2px 8px; border-radius: 6px;
+        background: rgba(var(--accent-rgb),0.1); color: var(--accent);
+        font-weight: 600; white-space: nowrap;
     }
 
     /* Breadcrumb */
