@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
-import Link from '@tiptap/extension-link';
 import Placeholder from '@tiptap/extension-placeholder';
 import Typography from '@tiptap/extension-typography';
 import { Markdown } from 'tiptap-markdown';
 import { common, createLowlight } from 'lowlight';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import { filesAPI } from '../utils/api';
+import Loader from './Loader';
 import {
     ArrowLeft, Save, Upload as UploadIcon,
     Bold, Italic, Heading1, Heading2, List, ListOrdered,
@@ -76,10 +76,6 @@ export default function MarkdownEditor({ file, onClose }) {
             CustomImage.configure({
                 inline: true,
                 allowBase64: true,
-            }),
-            Link.configure({
-                openOnClick: false,
-                autolink: true,
             }),
             Placeholder.configure({
                 placeholder: 'Start writing...',
@@ -243,7 +239,7 @@ export default function MarkdownEditor({ file, onClose }) {
                 background: 'var(--bg-primary)', color: 'var(--text-secondary)',
             }}>
                 <div style={{ textAlign: 'center' }}>
-                    <div className="w-8 h-8 border-2 border-t-[var(--accent)] rounded-full animate-spin mx-auto mb-2" />
+                    <div className="mx-auto mb-2 flex justify-center"><Loader className="scale-50" /></div>
                     Loading content...
                 </div>
             </div>

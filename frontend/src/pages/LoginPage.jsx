@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
-import { Cloud, Eye, EyeOff, LogIn, ShieldCheck, Zap } from 'lucide-react';
+import { Cloud, Eye, EyeOff, LogIn } from 'lucide-react';
 import api from '../utils/api';
 import AuthBackground3D from '../components/AuthBackground3D';
+import Loader from '../components/Loader';
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
@@ -21,8 +22,9 @@ export default function LoginPage() {
         setLoading(true);
         try {
             const res = await api.post('/auth/login', { username, password });
-            login(res.data.access_token, { username });
-            navigate('/');
+            const userData = res.data.user || { username };
+            login(res.data.access_token, userData);
+            navigate(userData?.is_admin ? '/admin' : '/');
         } catch (err) {
             setError(err.response?.data?.detail || 'Login failed');
         } finally {
@@ -45,11 +47,6 @@ export default function LoginPage() {
                     </div>
                     <h1 className="text-2xl font-semibold text-[var(--auth-title)] tracking-tight">Welcome back</h1>
                     <p className="text-[13px] text-[var(--auth-muted)] mt-1.5">Sign in to your workspace and continue where you left off.</p>
-
-                    <div className="auth-chip-row mt-4">
-                        <span className="auth-chip"><ShieldCheck className="w-3.5 h-3.5" /> Secure</span>
-                        <span className="auth-chip"><Zap className="w-3.5 h-3.5" /> Fast Sync</span>
-                    </div>
                 </div>
 
                 {error && (
@@ -96,7 +93,10 @@ export default function LoginPage() {
                         className="auth-submit-btn w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[var(--auth-accent)] hover:bg-[var(--auth-accent-hover)] text-[var(--auth-bg-start)] text-[14px] font-semibold transition-colors disabled:opacity-50"
                     >
                         {loading ? (
-                            <div className="w-4 h-4 border-2 border-[var(--auth-spinner-track)] border-t-[var(--auth-bg-start)] rounded-full animate-spin" />
+                            <>
+                                <Loader className="scale-[0.4]" />
+                                Signing in...
+                            </>
                         ) : (
                             <>
                                 <LogIn className="w-4 h-4" />

@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api'; // Ensure axios instance is used
 import { Loader2 } from 'lucide-react';
+import Loader from '../components/Loader';
 
 export default function EditorPage() {
     const { fileId } = useParams();
@@ -207,7 +208,7 @@ export default function EditorPage() {
             {loading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-white" style={{ zIndex: 100000 }}>
                     <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                        <Loader className="scale-75" />
                         <p className="text-sm text-gray-500">Loading Editor...</p>
                         <p className="text-xs text-gray-400">If this takes long, the OnlyOffice server might be waking up</p>
                     </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Download, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
 import { filesAPI } from '../utils/api';
+import Loader from './Loader';
 
 export default function MediaViewerModal({ file, onClose }) {
     const [url, setUrl] = useState(null);
@@ -44,7 +45,7 @@ export default function MediaViewerModal({ file, onClose }) {
         if (loading) {
             return (
                 <div className="flex flex-col items-center justify-center text-white">
-                    <div className="w-10 h-10 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4" />
+                    <Loader className="mb-4" />
                     <p>Loading media...</p>
                 </div>
             );
