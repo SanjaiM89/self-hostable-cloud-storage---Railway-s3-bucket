@@ -136,7 +136,6 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 <div className="px-3 pt-2 pb-1">
                     <button onClick={() => onNavigate(null, 'Workspace')} className={`w-full text-left nav-item flex items-center gap-2.5 px-2.5 py-[8px] text-[30px] ${currentFolder === null ? 'active font-medium' : 'text-[var(--sidebar-text)]'}`}>
                         <Home className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />
-                        Workspace
                     </button>
                 </div>
 

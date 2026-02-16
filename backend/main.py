@@ -8,11 +8,13 @@ try:
     from .routers import auth, files, sharing, admin
     from .models import User
     from .auth.utils import get_password_hash
+    from .websockets import manager
 except ImportError:
     from database import engine, Base, SessionLocal
     from routers import auth, files, sharing, admin
     from models import User
     from auth.utils import get_password_hash
+    from websockets import manager
 
 
 def ensure_schema_updates():
@@ -105,8 +107,22 @@ app.include_router(sharing.router)
 app.include_router(admin.router)
 
 
-@app.get("/debug-connection")
-def debug_connection():
+app.include_router(admin.router)
+
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket)
+    try:
+        while True:
+            # Just keep connection alive, maybe handle ping/pong
+            data = await websocket.receive_text()
+            # Optional: handle incoming messages
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+    except Exception:
+        manager.disconnect(websocket)
     results = {
         "env_vars": {
             "DATABASE_URL_SET": bool(os.getenv("DATABASE_URL")),

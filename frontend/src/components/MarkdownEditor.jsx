@@ -17,7 +17,8 @@ import {
 } from 'lucide-react';
 
 // Initialize lowlight with common languages
-const lowlight = createLowlight(common);
+// Initialize lowlight with common languages - MOVED INSIDE COMPONENT TO AVOID REFERENCE_ERROR
+// const lowlight = createLowlight(common);
 
 const FONT_SIZE_STORAGE_KEY = 'md_font_size_preference_v1';
 const PENDING_UPLOAD_STORAGE_KEY = 'md_pending_uploads_v1';
@@ -153,15 +154,19 @@ export default function MarkdownEditor({ file, onClose }) {
     }, []);
 
     // Tiptap Editor Setup
+    // Initialize lowlight safely prevents ReferenceError
+    const lowlightExtension = useMemo(() => {
+        const ll = createLowlight(common);
+        return CodeBlockLowlight.configure({ lowlight: ll });
+    }, []);
+
     const editor = useEditor({
         extensions: [
             StarterKit.configure({
                 heading: { levels: [1, 2, 3] },
                 codeBlock: false, // Disable default codeBlock to use lowlight
             }),
-            CodeBlockLowlight.configure({
-                lowlight,
-            }),
+            lowlightExtension,
             Typography,
             CustomImage.configure({
                 inline: true,
@@ -226,6 +231,12 @@ export default function MarkdownEditor({ file, onClose }) {
         setSaveStatus('saving');
         try {
             const contentWithMeta = withMarkdownMeta(text, fontSize);
+
+            // Optimistic update to SessionStorage
+            try {
+                sessionStorage.setItem(`file_content_${file.id}`, contentWithMeta);
+            } catch (e) { /* ignore quota */ }
+
             await filesAPI.saveContent(file.id, contentWithMeta);
             localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(fontSize));
             setSaveStatus('saved');
@@ -257,16 +268,41 @@ export default function MarkdownEditor({ file, onClose }) {
         const loadContent = async () => {
             try {
                 setLoading(true);
+
+                // Try SessionStorage first
+                const cached = sessionStorage.getItem(`file_content_${file.id}`);
+                if (cached) {
+                    const { cleanContent, fontSize: metaFontSize } = parseMarkdownMeta(cached);
+                    if (metaFontSize) {
+                        setFontSize(metaFontSize);
+                    }
+                    setOriginalContent(cached);
+                    if (editor) editor.commands.setContent(cleanContent);
+                    setLoading(false); // Valid to show immediately
+                }
+
+                // Stale-while-revalidate pattern
                 const res = await filesAPI.getContent(file.id);
                 const content = res.data.content || '';
-                const { cleanContent, fontSize: metaFontSize } = parseMarkdownMeta(content);
-                if (metaFontSize) {
-                    setFontSize(metaFontSize);
-                    localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(metaFontSize));
-                }
-                setOriginalContent(content);
-                if (editor) {
-                    editor.commands.setContent(cleanContent);
+
+                // Only update if different (or if we didn't have cache)
+                if (content !== cached) {
+                    const { cleanContent, fontSize: metaFontSize } = parseMarkdownMeta(content);
+                    if (metaFontSize) {
+                        setFontSize(metaFontSize);
+                        localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(metaFontSize));
+                    }
+                    setOriginalContent(content);
+                    if (editor) {
+                        // Only update editor if user hasn't started typing yet? 
+                        // For now, simplicity: update it (might lose 100ms of typing if very unlucky race)
+                        // Better: check if editor is empty or same as cache
+                        const current = editor.storage.markdown.getMarkdown();
+                        if (!cached || current === parseMarkdownMeta(cached).cleanContent) {
+                            editor.commands.setContent(cleanContent);
+                        }
+                    }
+                    sessionStorage.setItem(`file_content_${file.id}`, content);
                 }
             } catch (err) {
                 console.error('Failed to load markdown:', err);

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useWebSocket } from '../context/WebSocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
@@ -50,6 +52,7 @@ export default function Dashboard() {
     const editorInstanceRef = useRef(null);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
+    const { subscribe } = useWebSocket();
 
     // Markdown editor state
     const [markdownFile, setMarkdownFile] = useState(null);
@@ -57,6 +60,21 @@ export default function Dashboard() {
     // ─── File fetching ───
     const fetchFiles = useCallback(async () => {
         setLoading(true);
+
+        // Try load from cache first
+        const cacheKey = `files_cache_${currentFolder || 'root'}_${viewScope}`;
+        if (!hasLoadedOnce) {
+            try {
+                const cached = localStorage.getItem(cacheKey);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    setFiles(parsed);
+                    setHasLoadedOnce(true);
+                    setLoading(false); // Show cached immediately
+                }
+            } catch (e) { }
+        }
+
         try {
             const pageSize = 50;
             const firstRes = viewScope === 'trash'
@@ -64,25 +82,48 @@ export default function Dashboard() {
                 : await filesAPI.listPaginated(currentFolder, pageSize, 0);
 
             const firstBatch = normalizeListResponse(firstRes?.data);
-            setFiles(firstBatch.items);
-            setHasLoadedOnce(true);
+
+            // If we have more, fetch next page immediately (simplified for now)
+            let allItems = firstBatch.items;
 
             if (firstBatch.hasMore) {
                 const secondRes = viewScope === 'trash'
                     ? await filesAPI.trashPaginated(pageSize, pageSize)
                     : await filesAPI.listPaginated(currentFolder, pageSize, pageSize);
                 const secondBatch = normalizeListResponse(secondRes?.data);
-                setFiles((prev) => [...prev, ...secondBatch.items]);
+                allItems = [...allItems, ...secondBatch.items];
             }
+
+            setFiles(allItems);
+            setHasLoadedOnce(true);
+
+            // Update cache
+            localStorage.setItem(cacheKey, JSON.stringify(allItems));
+
         } catch (err) {
             console.error('Failed to fetch files:', err);
             setHasLoadedOnce(true);
         } finally {
             setLoading(false);
         }
-    }, [currentFolder, viewScope]);
+    }, [currentFolder, viewScope, hasLoadedOnce]);
 
     useEffect(() => { fetchFiles(); }, [fetchFiles]);
+
+    // WebSocket Subscription
+    useEffect(() => {
+        const unsubscribe = subscribe((msg) => {
+            if (msg.type === 'refresh') {
+                const isRelevant = (msg.folder_id == currentFolder) || (!currentFolder && !msg.folder_id);
+                if (isRelevant) {
+                    fetchFiles();
+                }
+            } else if (msg.type === 'refresh_trash' && viewScope === 'trash') {
+                fetchFiles();
+            }
+        });
+        return () => unsubscribe();
+    }, [subscribe, fetchFiles, currentFolder, viewScope]);
 
     useEffect(() => {
         const isTrash = searchParams.get('trash') === '1';

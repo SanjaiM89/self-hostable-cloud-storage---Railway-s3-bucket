@@ -10,12 +10,14 @@ try:
     from ..database import get_db
     from ..models import File as FileModel, User
     from ..auth.utils import decode_access_token
-    from ..storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+    from .storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+    from ..websockets import manager
 except ImportError:
     from database import get_db
     from models import File as FileModel, User
     from auth.utils import decode_access_token
     from storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+    from websockets import manager
 
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
@@ -188,9 +190,12 @@ async def upload_file(
         is_folder=False,
     )
     db.add(new_file)
-    db.commit()
     db.refresh(new_file)
     
+    # Broadcast update
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": parent_id}))
+
     return {
         "id": new_file.id,
         "name": new_file.name,
@@ -262,9 +267,12 @@ def register_uploaded_file(
         is_folder=False,
     )
     db.add(new_file)
-    db.commit()
     db.refresh(new_file)
     
+    # Broadcast update
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": data.parent_id}))
+
     return {
         "id": new_file.id,
         "name": new_file.name,
@@ -351,9 +359,12 @@ def create_folder(
         is_folder=True,
     )
     db.add(new_folder)
-    db.commit()
     db.refresh(new_folder)
     
+    # Broadcast update
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": folder.parent_id}))
+
     return {
         "id": new_folder.id,
         "name": new_folder.name,
@@ -442,6 +453,12 @@ def delete_file(
     trashed_at = datetime.datetime.utcnow()
     _trash_item(file, current_user.username, trashed_at, db)
     db.commit()
+    
+    # Broadcast update (refresh current folder and trash)
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": file.parent_id}))
+    asyncio.create_task(manager.broadcast({"type": "refresh_trash"}))
+
     return {"message": "Moved to trash"}
 
 
@@ -557,6 +574,12 @@ def restore_from_trash(
     file.original_parent_id = None
     file.trashed_at = None
     db.commit()
+    
+    # Broadcast
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": file.parent_id}))
+    asyncio.create_task(manager.broadcast({"type": "refresh_trash"}))
+
     return {'message': 'Restored'}
 
 
@@ -582,6 +605,11 @@ def empty_trash(
         db.delete(item)
         deleted += 1
     db.commit()
+    
+    # Broadcast
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh_trash"}))
+
     return {"message": "Trash emptied", "deleted": deleted}
 
 
@@ -603,6 +631,11 @@ def rename_file(
     file.name = data.name
     db.commit()
     db.refresh(file)
+    
+    # Broadcast
+    import asyncio
+    asyncio.create_task(manager.broadcast({"type": "refresh", "folder_id": file.parent_id}))
+
     return {"id": file.id, "name": file.name}
 
 
