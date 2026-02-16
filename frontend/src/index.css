@@ -58,51 +58,51 @@
 }
 
 .dark {
-  --bg-primary: #000000;
-  --bg-secondary: #050505;
-  --bg-tertiary: #0a0a0a;
-  --text-primary: #cdd6f4;
-  --text-secondary: #a6adc8;
-  --text-tertiary: #6c7086;
-  --border-color: #313244;
-  --card-bg: #1e1e2e;
-  --card-hover: #2a2a3c;
-  --card-border: #313244;
-  --accent: #a6e3a1;
-  --accent-hover: #94e2d5;
-  --accent-light: rgba(166, 227, 161, 0.1);
-  --danger: #f38ba8;
-  --warning: #f9e2af;
-  --scrollbar-thumb: #45475a;
+  --bg-primary: #262626;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #343434;
+  --text-primary: #f3f4f6;
+  --text-secondary: #d1d5db;
+  --text-tertiary: #9ca3af;
+  --border-color: #3f3f46;
+  --card-bg: #2f2f32;
+  --card-hover: #38383d;
+  --card-border: #3f3f46;
+  --accent: #34d399;
+  --accent-hover: #10b981;
+  --accent-light: rgba(52, 211, 153, 0.16);
+  --danger: #fb7185;
+  --warning: #f59e0b;
+  --scrollbar-thumb: #52525b;
   --scrollbar-track: transparent;
-  --breadcrumb-bg: #181825;
-  --toolbar-bg: #181825;
-  --sidebar-bg: #050505;
-  --sidebar-text: #9ca3af;
-  --sidebar-text-active: #f9fafb;
-  --sidebar-hover: #111111;
-  --sidebar-active: #171717;
-  --sidebar-icon-rail: #0b0b14;
-  --sidebar-border: #1f1f1f;
-  --bg-hover: #2a2a3c;
+  --breadcrumb-bg: #2d2d2d;
+  --toolbar-bg: #2d2d2d;
+  --sidebar-bg: #242424;
+  --sidebar-text: #cbd5e1;
+  --sidebar-text-active: #f8fafc;
+  --sidebar-hover: #313131;
+  --sidebar-active: #3a3a3a;
+  --sidebar-icon-rail: #202020;
+  --sidebar-border: #3f3f46;
+  --bg-hover: #38383d;
 
-  --auth-bg-start: #1e1e2e;
-  --auth-bg-mid: #181825;
-  --auth-bg-end: #11111b;
-  --auth-card-bg: rgba(30, 30, 46, 0.8);
-  --auth-card-border: rgba(49, 50, 68, 0.6);
-  --auth-title: #cdd6f4;
-  --auth-muted: #a6adc8;
-  --auth-input-bg: #181825;
-  --auth-input-border: #313244;
-  --auth-input-text: #cdd6f4;
-  --auth-input-placeholder: #6c7086;
-  --auth-accent: #a6e3a1;
-  --auth-accent-hover: #94e2d5;
-  --auth-error: #f38ba8;
-  --auth-error-bg: rgba(243, 139, 168, 0.1);
-  --auth-error-border: rgba(243, 139, 168, 0.2);
-  --auth-spinner-track: rgba(30, 30, 46, 0.3);
+  --auth-bg-start: #2f2f2f;
+  --auth-bg-mid: #282828;
+  --auth-bg-end: #242424;
+  --auth-card-bg: rgba(47, 47, 50, 0.82);
+  --auth-card-border: rgba(82, 82, 91, 0.6);
+  --auth-title: #f3f4f6;
+  --auth-muted: #d1d5db;
+  --auth-input-bg: #2d2d2d;
+  --auth-input-border: #52525b;
+  --auth-input-text: #f3f4f6;
+  --auth-input-placeholder: #a1a1aa;
+  --auth-accent: #34d399;
+  --auth-accent-hover: #10b981;
+  --auth-error: #fb7185;
+  --auth-error-bg: rgba(251, 113, 133, 0.12);
+  --auth-error-border: rgba(251, 113, 133, 0.25);
+  --auth-spinner-track: rgba(39, 39, 42, 0.35);
 }
 
 * {
@@ -495,3 +495,19 @@ body {
 .loader .bar10 { transform: rotate(270deg) translate(0, -130%); animation-delay: -0.3s; }
 .loader .bar11 { transform: rotate(300deg) translate(0, -130%); animation-delay: -0.2s; }
 .loader .bar12 { transform: rotate(330deg) translate(0, -130%); animation-delay: -0.1s; }
+
+
+.icon-rail-btn svg,
+.nav-item svg,
+.file-card svg {
+  stroke-width: 2.25;
+}
+
+.sidebar-resize-handle {
+  cursor: col-resize;
+  background: transparent;
+}
+
+.sidebar-resize-handle:hover {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}

@@ -21,7 +21,6 @@ export function Tree({ elements = [], initialExpandedItems = [], initialSelected
 }
 
 function TreeNode({ element, level = 0 }) {
-  const { expanded } = useContext(TreeCtx);
   const isFolder = !!element.children?.length;
   if (isFolder) {
     return (
@@ -30,7 +29,7 @@ function TreeNode({ element, level = 0 }) {
       </Folder>
     );
   }
-  return <File value={element.id} level={level}><p>{element.name}</p></File>;
+  return <File value={element.id} level={level} label={element.name} />;
 }
 
 export function Folder({ element, value, level = 0, children }) {
@@ -40,30 +39,30 @@ export function Folder({ element, value, level = 0, children }) {
   return (
     <div>
       <button
-        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm ${selected ? 'bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)]' : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)]'}`}
+        className={`w-full min-w-0 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm ${selected ? 'bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)]' : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)]'}`}
         style={{ paddingLeft: `${8 + level * 16}px` }}
         onClick={() => { setSelectedId(value); toggle(value); }}
       >
-        <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} />
-        {open ? <FolderOpen className="w-4 h-4 text-[var(--sidebar-accent)]" /> : <FolderIcon className="w-4 h-4" />}
-        <span className="truncate">{element}</span>
+        <ChevronRight className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-90' : ''}`} strokeWidth={2.4} />
+        {open ? <FolderOpen className="w-4 h-4 text-[var(--sidebar-accent)]" strokeWidth={2.4} /> : <FolderIcon className="w-4 h-4" strokeWidth={2.4} />}
+        <span className="flex-1 min-w-0 truncate text-left whitespace-nowrap">{element}</span>
       </button>
       {open && <div>{children}</div>}
     </div>
   );
 }
 
-export function File({ value, level = 0, children }) {
+export function File({ value, level = 0, label }) {
   const { selectedId, setSelectedId } = useContext(TreeCtx);
   const selected = selectedId === value;
   return (
     <button
-      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm ${selected ? 'bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)]' : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)]'}`}
+      className={`w-full min-w-0 flex items-center gap-2 px-2 py-1.5 rounded-md text-sm ${selected ? 'bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)]' : 'text-[var(--sidebar-text)] hover:bg-[var(--sidebar-hover)]'}`}
       style={{ paddingLeft: `${8 + level * 16 + 18}px` }}
       onClick={() => setSelectedId(value)}
     >
-      <FileIcon className="w-3.5 h-3.5" />
-      {children}
+      <FileIcon className="w-3.5 h-3.5" strokeWidth={2.3} />
+      <span className="flex-1 min-w-0 truncate text-left whitespace-nowrap">{label}</span>
     </button>
   );
 }
