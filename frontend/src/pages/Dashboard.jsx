@@ -8,6 +8,7 @@ import Navbar from '../components/Navbar';
 import FileGrid from '../components/FileGrid';
 import ActivityBar from '../components/ActivityBar';
 import MarkdownEditor from '../components/MarkdownEditor';
+import PdfViewer from '../components/PdfViewer';
 import { filesAPI } from '../utils/api';
 
 let activityIdCounter = 0;
@@ -56,6 +57,10 @@ export default function Dashboard() {
 
     // Markdown editor state
     const [markdownFile, setMarkdownFile] = useState(null);
+
+    // PDF viewer state
+    const [pdfFile, setPdfFile] = useState(null);
+    const [pdfUrl, setPdfUrl] = useState(null);
 
     // ─── File fetching ───
     const fetchFiles = useCallback(async () => {
@@ -416,8 +421,23 @@ export default function Dashboard() {
             return;
         }
 
+        // PDF files → custom viewer
+        if (ext === 'pdf') {
+            (async () => {
+                try {
+                    const res = await filesAPI.download(file.id);
+                    setPdfFile(file);
+                    setPdfUrl(res.data.url);
+                    setBreadcrumbs(prev => [...prev, { id: `pdf-${file.id}`, name: file.name }]);
+                } catch (err) {
+                    console.error('Failed to open PDF:', err);
+                }
+            })();
+            return;
+        }
+
         // Editable documents
-        const editableExts = ['docx', 'xlsx', 'pptx', 'txt', 'csv', 'odt', 'ods', 'odp', 'rtf', 'pdf'];
+        const editableExts = ['docx', 'xlsx', 'pptx', 'txt', 'csv', 'odt', 'ods', 'odp', 'rtf'];
         if (editableExts.includes(ext)) {
             openEditor(file);
             return;
@@ -466,6 +486,10 @@ export default function Dashboard() {
                             setMarkdownFile(null);
                             setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
                         }
+                        if (pdfFile) {
+                            setPdfFile(null); setPdfUrl(null);
+                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('pdf-')));
+                        }
                         handleNavigate(id, breadcrumbs.find((b) => b.id === id)?.name);
                     }}
                     searchQuery={searchQuery}
@@ -475,12 +499,16 @@ export default function Dashboard() {
                     onUpload={handleUpload}
                     onUploadFolder={handleFolderUpload}
                     onToggleActivity={() => setActivityOpen((p) => !p)}
-                    showBackButton={!!editingFile || !!markdownFile}
+                    showBackButton={!!editingFile || !!markdownFile || !!pdfFile}
                     onOpenSearch={() => setSearchOpen(true)}
                     onBack={() => {
                         if (markdownFile) {
                             setMarkdownFile(null);
                             setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
+                            fetchFiles();
+                        } else if (pdfFile) {
+                            setPdfFile(null); setPdfUrl(null);
+                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('pdf-')));
                             fetchFiles();
                         } else {
                             closeEditor();
@@ -507,6 +535,21 @@ export default function Dashboard() {
                                     onClose={() => {
                                         setMarkdownFile(null);
                                         setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
+                                        fetchFiles();
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {/* PDF Viewer — shown when a .pdf file is open */}
+                        {pdfFile && pdfUrl && (
+                            <div className="h-full w-full">
+                                <PdfViewer
+                                    file={pdfFile}
+                                    fileUrl={pdfUrl}
+                                    onClose={() => {
+                                        setPdfFile(null); setPdfUrl(null);
+                                        setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('pdf-')));
                                         fetchFiles();
                                     }}
                                 />
@@ -561,7 +604,7 @@ export default function Dashboard() {
                         )}
 
                         {/* File Grid — hidden when editor is open */}
-                        <div className="px-5 py-4 smooth-panel" style={{ display: (editingFile || markdownFile) ? 'none' : 'block' }}>
+                        <div className="px-5 py-4 smooth-panel" style={{ display: (editingFile || markdownFile || pdfFile) ? 'none' : 'block' }}>
                             {loading && hasLoadedOnce && (
                                 <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
                                     <Loader className="scale-50" />
