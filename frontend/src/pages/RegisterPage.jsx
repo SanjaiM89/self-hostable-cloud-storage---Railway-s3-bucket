@@ -128,19 +128,14 @@ export default function RegisterPage() {
                     <button
                         type="submit"
                         disabled={loading}
-                        className="auth-submit-btn w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-[var(--auth-accent)] hover:bg-[var(--auth-accent-hover)] text-[var(--auth-bg-start)] text-[14px] font-semibold transition-colors disabled:opacity-50"
+                        className="auth-submit-btn w-full relative flex items-center justify-center py-2.5 rounded-lg bg-[var(--auth-accent)] hover:bg-[var(--auth-accent-hover)] text-[var(--auth-bg-start)] text-[14px] font-semibold transition-colors disabled:opacity-50"
                     >
                         {loading ? (
-                            <>
-                                <Loader className="scale-[0.4]" />
-                                Creating account...
-                            </>
+                            <span className="absolute left-1/2 -translate-x-16"><Loader className="scale-[0.35]" /></span>
                         ) : (
-                            <>
-                                <UserPlus className="w-4 h-4" />
-                                Create Account
-                            </>
+                            <UserPlus className="absolute left-1/2 -translate-x-16 w-4 h-4" />
                         )}
+                        <span>Create Account</span>
                     </button>
                 </form>
 
