@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi.security import OAuth2PasswordBearer
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -6,11 +7,31 @@ from pydantic import BaseModel
 
 from database import get_db
 from models import User
-from auth.auth import get_current_user
+
+try:
+    from ..auth.utils import decode_access_token
+except ImportError:
+    from auth.utils import decode_access_token
+
 try:
     from ..ai.service import chat_stream
 except ImportError:
     from ai.service import chat_stream
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = decode_access_token(token)
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.username == username).first()
+        if user is None:
+            raise HTTPException(status_code=401, detail="User not found")
+        return user
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 router = APIRouter(
     prefix="/ai",
