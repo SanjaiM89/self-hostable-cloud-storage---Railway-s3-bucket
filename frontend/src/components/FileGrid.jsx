@@ -9,6 +9,7 @@ import {
 import { filesAPI } from '../utils/api';
 import ShareModal from './ShareModal';
 import InputModal from './InputModal';
+import { useMobile } from '../mobile';
 
 const getFileIcon = (file) => {
     if (file.is_folder) return { icon: Folder, color: '#a6e3a1' };
@@ -167,8 +168,10 @@ function FileCard({ file, onOpen, onContextMenu, index, selected, onClickItem })
     const [hoverPreview, setHoverPreview] = useState(null);
     const hoverTimeout = useRef(null);
     const { icon: Icon, color } = getFileIcon(file);
+    const isMobile = useMobile();
 
     const handleMouseEnter = (e) => {
+        if (isMobile) return;
         if (file.is_folder) {
             // Capture the element NOW — e.currentTarget becomes null after the handler returns
             const el = e.currentTarget;
@@ -261,18 +264,26 @@ export default function FileGrid({
     onCreateFolder, onUpload, onCreateDocument, onRefresh,
     viewMode = 'grid',
     onSelectionChange,
+
+    onMobileAction,
+    onShare,
 }) {
     const [ctxMenu, setCtxMenu] = useState(null);
     const [inputModal, setInputModal] = useState(null); // { title, placeholder, defaultValue, onConfirm }
-    const [shareModal, setShareModal] = useState(null); // file object
+    // const [shareModal, setShareModal] = useState(null); // REMOVED: Hoisted to Dashboard
     const fileInputRef = useRef(null);
     const rootRef = useRef(null);
     const [selectedIds, setSelectedIds] = useState([]);
     const [selectionRect, setSelectionRect] = useState(null);
     const dragStartRef = useRef(null);
+    const isMobile = useMobile();
 
     const handleContextMenu = (e, file = null) => {
         e.preventDefault();
+        if (isMobile && file && onMobileAction) {
+            onMobileAction(file);
+            return;
+        }
         const items = [];
 
         if (file) {
@@ -280,7 +291,7 @@ export default function FileGrid({
             if (!file.is_folder) {
                 items.push({ icon: Download, label: 'Download', action: () => onDownload(file) });
             }
-            items.push({ icon: Share2, label: 'Share', action: () => setShareModal(file) });
+            items.push({ icon: Share2, label: 'Share', action: () => onShare(file) });
             items.push({ icon: Pencil, label: 'Rename', action: () => onRename(file) });
             if (!file.is_folder && isZip(file)) {
                 items.push({ icon: PackageOpen, label: 'Extract ZIP', action: () => onExtract(file) });
@@ -471,7 +482,7 @@ export default function FileGrid({
             {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
             {inputModal && <InputModal {...inputModal} onCancel={() => setInputModal(null)} />}
             {selectionRect && <div className="fixed border border-[var(--accent)] bg-[var(--accent-light)] pointer-events-none z-30" style={{ left: selectionRect.left, top: selectionRect.top, width: selectionRect.width, height: selectionRect.height }} />}
-            {shareModal && <ShareModal file={shareModal} onClose={() => setShareModal(null)} />}
+            {/* ShareModal hoisted to Dashboard */}
         </div>
     );
 }

@@ -1,0 +1,163 @@
+/* ═══════════════════════════════════════════════════════════════
+   Mobile Responsive Overrides
+   All mobile-specific styling in one place.
+   Imported in main.jsx.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Phone (< 768px) ── */
+@media (max-width: 767px) {
+
+    /* Hide desktop sidebar */
+    .desktop-sidebar {
+        display: none !important;
+    }
+
+    /* Navbar compact */
+    .desktop-navbar {
+        height: 48px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+    }
+
+    .desktop-navbar .nav-upload-btn,
+    .desktop-navbar .nav-folder-upload-btn,
+    .desktop-navbar .nav-activity-btn,
+    .desktop-navbar .nav-view-toggle {
+        display: none !important;
+    }
+
+    .desktop-navbar .nav-search-trigger {
+        max-width: 100% !important;
+        order: 0 !important;
+    }
+
+    /* File grid — smaller cards */
+    .file-card .card-preview {
+        height: 100px !important;
+    }
+
+    .file-card .card-preview .file-icon-lg {
+        width: 32px !important;
+        height: 32px !important;
+    }
+
+    .file-card .card-preview .folder-icon-lg {
+        width: 40px !important;
+        height: 40px !important;
+    }
+
+    /* Always show the ⋯ button on mobile (no hover) */
+    .file-card .card-more-btn {
+        opacity: 1 !important;
+    }
+
+    /* File grid padding */
+    .file-grid-container {
+        padding: 12px !important;
+    }
+
+    /* Bottom nav clearance */
+    .main-content-area {
+        padding-bottom: 72px !important;
+    }
+
+    /* PDF viewer toolbar */
+    .pdf-toolbar {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+
+    .pdf-toolbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* PDF thumbnail sidebar hidden by default */
+    .pdf-thumb-sidebar {
+        display: none !important;
+    }
+
+    .pdf-thumb-sidebar.mobile-visible {
+        display: flex !important;
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        bottom: 0 !important;
+        z-index: 60 !important;
+        width: 160px !important;
+    }
+
+    /* Markdown editor toolbar */
+    .md-toolbar {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        flex-wrap: nowrap !important;
+    }
+
+    .md-toolbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    /* Markdown editor area — full width */
+    .ProseMirror {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+    }
+
+    /* Search modal — full screen on mobile */
+    .search-modal-content {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Input modal — wider on mobile */
+    .input-modal-content {
+        width: calc(100vw - 32px) !important;
+        min-width: 0 !important;
+    }
+
+    /* Media viewer — full screen */
+    .media-viewer-content {
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100% !important;
+        max-height: 100% !important;
+        border-radius: 0 !important;
+        padding: 0 !important;
+    }
+
+    /* Touch targets — minimum 44px */
+    button,
+    a,
+    select,
+    [role="button"] {
+        min-height: 36px;
+        min-width: 36px;
+    }
+
+    /* Shared file page — breadcrumbs scroll */
+    .sf-breadcrumbs {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        flex-wrap: nowrap !important;
+        scrollbar-width: none;
+    }
+
+    .sf-breadcrumbs::-webkit-scrollbar {
+        display: none;
+    }
+}
+
+/* ── Tablet (768px - 1024px) ── */
+@media (min-width: 768px) and (max-width: 1024px) {
+
+    /* Slightly smaller file cards */
+    .file-card .card-preview {
+        height: 140px !important;
+    }
+}

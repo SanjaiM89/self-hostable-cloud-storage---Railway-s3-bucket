@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, Copy, Check, Trash2, UserPlus, Globe, X } from 'lucide-react';
 import { sharesAPI } from '../utils/api';
 import Loader from './Loader';
+import { useMobile, MobileShareModal } from '../mobile';
 
 export default function ShareModal({ file, onClose }) {
     const [shares, setShares] = useState([]);
@@ -13,6 +14,7 @@ export default function ShareModal({ file, onClose }) {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(true);
     const inputRef = useRef(null);
+    const isMobile = useMobile();
 
     useEffect(() => {
         loadShares();
@@ -109,6 +111,10 @@ export default function ShareModal({ file, onClose }) {
     };
 
     const shareLink = publicShare ? `${window.location.origin}/share/${publicShare.share_token}` : '';
+
+    if (isMobile) {
+        return <MobileShareModal file={file} onClose={onClose} />;
+    }
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center" onClick={onClose}>

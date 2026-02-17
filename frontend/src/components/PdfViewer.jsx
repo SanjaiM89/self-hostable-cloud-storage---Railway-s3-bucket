@@ -9,10 +9,11 @@ import {
     Minus, Plus, RotateCw, Columns2
 } from 'lucide-react';
 import Loader from './Loader';
+import { useMobile, MobilePdfToolbar } from '../mobile';
 
 // ─── PDF.js Worker ───
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+// import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 // ─── Constants ───
 const ZOOM_LEVELS = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0];
@@ -63,6 +64,7 @@ export default function PdfViewer({ file, fileUrl, onClose, hideDownload = false
     const viewerRef = useRef(null);
     const pdfDocRef = useRef(null);
     const pageElementsRef = useRef({});
+    const isMobile = useMobile();
 
     // ─── Document Load ───
     const onDocumentLoadSuccess = useCallback(async (pdf) => {
@@ -313,87 +315,120 @@ export default function PdfViewer({ file, fileUrl, onClose, hideDownload = false
         <div className="pdf-viewer h-full flex flex-col bg-[var(--bg-primary)] text-[var(--text-primary)]" style={{ fontFamily: "'Inter', sans-serif" }}>
 
             {/* ═══ Toolbar ═══ */}
-            <div className="pdf-toolbar">
-                {/* Left: Nav */}
-                <button onClick={onClose} className="pdf-tb" title="Close"><ArrowLeft size={18} /></button>
-                <div className="pdf-tb-sep" />
-                <button onClick={() => setSidebarOpen(v => !v)} className={`pdf-tb ${sidebarOpen ? 'pdf-tb-active' : ''}`} title="Toggle Thumbnails"><PanelLeft size={16} /></button>
-                <div className="pdf-tb-sep" />
+            {/* ═══ Toolbar ═══ */}
+            {isMobile ? (
+                <MobilePdfToolbar
+                    scale={scale}
+                    zoomIn={zoomIn}
+                    zoomOut={zoomOut}
+                    zoomLevels={ZOOM_LEVELS}
+                    onScaleChange={setScale}
+                    onRotate={() => setRotation(r => (r + 90) % 360)}
+                    tool={tool}
+                    onToolChange={setTool}
+                    highlightColors={HIGHLIGHT_COLORS}
+                    highlightColor={highlightColor}
+                    onHighlightColorChange={setHighlightColor}
+                    drawColors={DRAW_COLORS}
+                    drawColor={drawColor}
+                    onDrawColorChange={setDrawColor}
+                    drawWidths={DRAW_WIDTHS}
+                    drawWidth={drawWidth}
+                    onDrawWidthChange={setDrawWidth}
+                    currentPage={currentPage}
+                    numPages={numPages}
+                    onPageChange={goToPage}
+                    searchOpen={searchOpen}
+                    onToggleSearch={() => setSearchOpen(!searchOpen)}
+                    showThumbnails={sidebarOpen}
+                    onToggleThumbnails={() => setSidebarOpen(!sidebarOpen)}
+                    onPrint={() => window.print()}
+                    onDownload={handleDownload}
+                    hideDownload={hideDownload}
+                />
+            ) : (
+                <div className="pdf-toolbar">
+                    {/* Left: Nav */}
+                    <button onClick={onClose} className="pdf-tb" title="Close"><ArrowLeft size={18} /></button>
+                    <div className="pdf-tb-sep" />
+                    <button onClick={() => setSidebarOpen(v => !v)} className={`pdf-tb ${sidebarOpen ? 'pdf-tb-active' : ''}`} title="Toggle Thumbnails"><PanelLeft size={16} /></button>
+                    <div className="pdf-tb-sep" />
 
-                <button onClick={() => goToPage(1)} className="pdf-tb" title="First Page" disabled={currentPage <= 1}><ChevronsLeft size={16} /></button>
-                <button onClick={() => goToPage(currentPage - 1)} className="pdf-tb" title="Previous" disabled={currentPage <= 1}><ChevronLeft size={16} /></button>
-                <div className="flex items-center gap-1 mx-1">
-                    <input
-                        type="number" min={1} max={numPages || 1} value={currentPage}
-                        onChange={e => goToPage(Number(e.target.value))}
-                        className="w-12 h-7 text-center rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs"
-                    />
-                    <span className="text-xs text-[var(--text-secondary)]">of {numPages || '?'}</span>
+                    <button onClick={() => goToPage(1)} className="pdf-tb" title="First Page" disabled={currentPage <= 1}><ChevronsLeft size={16} /></button>
+                    <button onClick={() => goToPage(currentPage - 1)} className="pdf-tb" title="Previous" disabled={currentPage <= 1}><ChevronLeft size={16} /></button>
+                    <div className="flex items-center gap-1 mx-1">
+                        <input
+                            type="number" min={1} max={numPages || 1} value={currentPage}
+                            onChange={e => goToPage(Number(e.target.value))}
+                            className="w-12 h-7 text-center rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs"
+                        />
+                        <span className="text-xs text-[var(--text-secondary)]">of {numPages || '?'}</span>
+                    </div>
+                    <button onClick={() => goToPage(currentPage + 1)} className="pdf-tb" title="Next" disabled={currentPage >= numPages}><ChevronRight size={16} /></button>
+                    <button onClick={() => goToPage(numPages)} className="pdf-tb" title="Last Page" disabled={currentPage >= numPages}><ChevronsRight size={16} /></button>
+
+                    <div className="pdf-tb-sep" />
+
+                    {/* Zoom */}
+                    <button onClick={zoomOut} className="pdf-tb" title="Zoom Out"><Minus size={16} /></button>
+                    <select value={scale} onChange={e => setScale(Number(e.target.value))} className="h-7 px-1 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs">
+                        {ZOOM_LEVELS.map(z => <option key={z} value={z}>{Math.round(z * 100)}%</option>)}
+                    </select>
+                    <button onClick={zoomIn} className="pdf-tb" title="Zoom In"><Plus size={16} /></button>
+                    <button onClick={() => setRotation(r => (r + 90) % 360)} className="pdf-tb" title="Rotate"><RotateCw size={16} /></button>
+
+                    <div className="pdf-tb-sep" />
+
+                    {/* Tools */}
+                    <button onClick={() => setTool('select')} className={`pdf-tb ${tool === 'select' ? 'pdf-tb-active' : ''}`} title="Select"><MousePointer2 size={16} /></button>
+
+                    <div className="relative">
+                        <button onClick={() => { setTool('highlight'); setShowHighlightColors(v => !v); setShowDrawColors(false); }} className={`pdf-tb ${tool === 'highlight' ? 'pdf-tb-active' : ''}`} title="Highlight Text">
+                            <Highlighter size={16} />
+                        </button>
+                        {showHighlightColors && (
+                            <div className="pdf-color-picker">
+                                {HIGHLIGHT_COLORS.map(c => (
+                                    <button key={c.value} onClick={() => { setHighlightColor(c.value); setShowHighlightColors(false); }}
+                                        className={`pdf-color-dot ${highlightColor === c.value ? 'ring-2 ring-white' : ''}`}
+                                        style={{ background: c.value }} title={c.name} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="relative">
+                        <button onClick={() => { setTool('draw'); setShowDrawColors(v => !v); setShowHighlightColors(false); }} className={`pdf-tb ${tool === 'draw' ? 'pdf-tb-active' : ''}`} title="Draw">
+                            <Pencil size={16} />
+                        </button>
+                        {showDrawColors && (
+                            <div className="pdf-color-picker">
+                                {DRAW_COLORS.map(c => (
+                                    <button key={c} onClick={() => { setDrawColor(c); setShowDrawColors(false); }}
+                                        className={`pdf-color-dot ${drawColor === c ? 'ring-2 ring-white' : ''}`}
+                                        style={{ background: c }} />
+                                ))}
+                                <div className="pdf-tb-sep-h" />
+                                {DRAW_WIDTHS.map(w => (
+                                    <button key={w} onClick={() => setDrawWidth(w)}
+                                        className={`pdf-width-dot ${drawWidth === w ? 'ring-2 ring-[var(--accent)]' : ''}`}>
+                                        <div style={{ width: `${w * 3}px`, height: `${w * 3}px`, borderRadius: '50%', background: drawColor }} />
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <button onClick={() => setTool('eraser')} className={`pdf-tb ${tool === 'eraser' ? 'pdf-tb-active' : ''}`} title="Eraser"><Eraser size={16} /></button>
+
+                    <div className="flex-1" />
+
+                    {/* Right actions */}
+                    <button onClick={() => setSearchOpen(v => !v)} className={`pdf-tb ${searchOpen ? 'pdf-tb-active' : ''}`} title="Search (Ctrl+F)"><Search size={16} /></button>
+                    {!hideDownload && <button onClick={handlePrint} className="pdf-tb" title="Print"><Printer size={16} /></button>}
+                    {!hideDownload && <button onClick={handleDownload} className="pdf-tb" title="Download"><Download size={16} /></button>}
                 </div>
-                <button onClick={() => goToPage(currentPage + 1)} className="pdf-tb" title="Next" disabled={currentPage >= numPages}><ChevronRight size={16} /></button>
-                <button onClick={() => goToPage(numPages)} className="pdf-tb" title="Last Page" disabled={currentPage >= numPages}><ChevronsRight size={16} /></button>
-
-                <div className="pdf-tb-sep" />
-
-                {/* Zoom */}
-                <button onClick={zoomOut} className="pdf-tb" title="Zoom Out"><Minus size={16} /></button>
-                <select value={scale} onChange={e => setScale(Number(e.target.value))} className="h-7 px-1 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs">
-                    {ZOOM_LEVELS.map(z => <option key={z} value={z}>{Math.round(z * 100)}%</option>)}
-                </select>
-                <button onClick={zoomIn} className="pdf-tb" title="Zoom In"><Plus size={16} /></button>
-                <button onClick={() => setRotation(r => (r + 90) % 360)} className="pdf-tb" title="Rotate"><RotateCw size={16} /></button>
-
-                <div className="pdf-tb-sep" />
-
-                {/* Tools */}
-                <button onClick={() => setTool('select')} className={`pdf-tb ${tool === 'select' ? 'pdf-tb-active' : ''}`} title="Select"><MousePointer2 size={16} /></button>
-
-                <div className="relative">
-                    <button onClick={() => { setTool('highlight'); setShowHighlightColors(v => !v); setShowDrawColors(false); }} className={`pdf-tb ${tool === 'highlight' ? 'pdf-tb-active' : ''}`} title="Highlight Text">
-                        <Highlighter size={16} />
-                    </button>
-                    {showHighlightColors && (
-                        <div className="pdf-color-picker">
-                            {HIGHLIGHT_COLORS.map(c => (
-                                <button key={c.value} onClick={() => { setHighlightColor(c.value); setShowHighlightColors(false); }}
-                                    className={`pdf-color-dot ${highlightColor === c.value ? 'ring-2 ring-white' : ''}`}
-                                    style={{ background: c.value }} title={c.name} />
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <div className="relative">
-                    <button onClick={() => { setTool('draw'); setShowDrawColors(v => !v); setShowHighlightColors(false); }} className={`pdf-tb ${tool === 'draw' ? 'pdf-tb-active' : ''}`} title="Draw">
-                        <Pencil size={16} />
-                    </button>
-                    {showDrawColors && (
-                        <div className="pdf-color-picker">
-                            {DRAW_COLORS.map(c => (
-                                <button key={c} onClick={() => { setDrawColor(c); setShowDrawColors(false); }}
-                                    className={`pdf-color-dot ${drawColor === c ? 'ring-2 ring-white' : ''}`}
-                                    style={{ background: c }} />
-                            ))}
-                            <div className="pdf-tb-sep-h" />
-                            {DRAW_WIDTHS.map(w => (
-                                <button key={w} onClick={() => setDrawWidth(w)}
-                                    className={`pdf-width-dot ${drawWidth === w ? 'ring-2 ring-[var(--accent)]' : ''}`}>
-                                    <div style={{ width: `${w * 3}px`, height: `${w * 3}px`, borderRadius: '50%', background: drawColor }} />
-                                </button>
-                            ))}
-                        </div>
-                    )}
-                </div>
-
-                <button onClick={() => setTool('eraser')} className={`pdf-tb ${tool === 'eraser' ? 'pdf-tb-active' : ''}`} title="Eraser"><Eraser size={16} /></button>
-
-                <div className="flex-1" />
-
-                {/* Right actions */}
-                <button onClick={() => setSearchOpen(v => !v)} className={`pdf-tb ${searchOpen ? 'pdf-tb-active' : ''}`} title="Search (Ctrl+F)"><Search size={16} /></button>
-                {!hideDownload && <button onClick={handlePrint} className="pdf-tb" title="Print"><Printer size={16} /></button>}
-                {!hideDownload && <button onClick={handleDownload} className="pdf-tb" title="Download"><Download size={16} /></button>}
-            </div>
+            )}
 
             {/* ═══ Search bar ═══ */}
             {searchOpen && (
@@ -419,25 +454,25 @@ export default function PdfViewer({ file, fileUrl, onClose, hideDownload = false
             <div className="flex flex-1 overflow-hidden">
 
                 {/* ─── Sidebar: Thumbnails ─── */}
-                {sidebarOpen && (
-                    <div className="pdf-sidebar">
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
-                            <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Pages</span>
-                            <button onClick={() => setSidebarOpen(false)} className="pdf-tb p-0.5"><X size={14} /></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2">
-                            {numPages && Array.from({ length: numPages }, (_, i) => i + 1).map(p => (
-                                <button key={p} onClick={() => goToPage(p)}
-                                    className={`pdf-thumb ${currentPage === p ? 'pdf-thumb-active' : ''}`}>
-                                    <Document file={fileUrl} loading="">
-                                        <Page pageNumber={p} width={130} renderTextLayer={false} renderAnnotationLayer={false} />
-                                    </Document>
-                                    <span className="text-[10px] text-[var(--text-secondary)] mt-1">{p}</span>
-                                </button>
-                            ))}
-                        </div>
+                <div
+                    className={`pdf-thumb-sidebar w-[200px] border-r border-[var(--border-color)] bg-[var(--bg-secondary)] overflow-y-auto flex-shrink-0 transition-all duration-300 ${!sidebarOpen ? '-ml-[200px]' : ''} ${isMobile && sidebarOpen ? 'mobile-visible shadow-2xl' : ''}`}
+                >
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--border-color)]">
+                        <span className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Pages</span>
+                        <button onClick={() => setSidebarOpen(false)} className="pdf-tb p-0.5"><X size={14} /></button>
                     </div>
-                )}
+                    <div className="flex-1 overflow-y-auto px-2 py-2 space-y-2">
+                        {numPages && Array.from({ length: numPages }, (_, i) => i + 1).map(p => (
+                            <button key={p} onClick={() => goToPage(p)}
+                                className={`pdf-thumb ${currentPage === p ? 'pdf-thumb-active' : ''}`}>
+                                <Document file={fileUrl} loading="">
+                                    <Page pageNumber={p} width={130} renderTextLayer={false} renderAnnotationLayer={false} />
+                                </Document>
+                                <span className="text-[10px] text-[var(--text-secondary)] mt-1">{p}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
                 {/* ─── Main Viewer ─── */}
                 <div ref={viewerRef} className="pdf-main-viewer" style={{ cursor: toolCursor }}>
