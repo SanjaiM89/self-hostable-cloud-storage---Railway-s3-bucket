@@ -50,71 +50,68 @@ function HomeRoute() {
   return <Dashboard />;
 }
 
+import ChatSidebar from './components/ai/ChatSidebar';
+
 export default function App() {
   return (
-    <ThemeProvider>
-      <AuthProvider>
-        <WebSocketProvider>
-          <Router>
-            <Suspense fallback={<LoadingFallback />}>
-              <Routes>
-                <Route
-                  path="/login"
-                  element={
-                    <PublicRoute>
-                      <LoginPage />
-                    </PublicRoute>
-                  }
-                />
-                <Route
-                  path="/register"
-                  element={
-                    <PublicRoute>
-                      <RegisterPage />
-                    </PublicRoute>
-                  }
-                />
-                <Route
-                  path="/"
-                  element={
-                    <ProtectedRoute>
-                      <HomeRoute />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/share/:token"
-                  element={<SharedFilePage />}
-                />
-                <Route
-                  path="/admin"
-                  element={
-                    <ProtectedRoute>
-                      <AdminPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/settings"
-                  element={
-                    <ProtectedRoute>
-                      <SettingsPage />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/editor/:fileId"
-                  element={
-                    <ProtectedRoute>
-                      <EditorPage />
-                    </ProtectedRoute>
-                  }
-                />
-              </Routes>
-            </Suspense>
-          </Router>
-        </WebSocketProvider>
-      </AuthProvider>
-    </ThemeProvider>
+    <Router>
+      <ChatSidebar />
+      <Suspense fallback={<LoadingFallback />}>
+        <Routes>
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <LoginPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute>
+                <RegisterPage />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <HomeRoute />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/share/:token"
+            element={<SharedFilePage />}
+          />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute>
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/editor/:fileId"
+            element={
+              <ProtectedRoute>
+                <EditorPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Suspense>
+    </Router>
   );
 }

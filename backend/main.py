@@ -7,13 +7,13 @@ import os
 
 try:
     from .database import engine, Base, SessionLocal
-    from .routers import auth, files, sharing, admin
+    from .routers import auth, files, sharing, admin, ai
     from .models import User
     from .auth.utils import get_password_hash
     from .ws_manager import manager
 except ImportError:
     from database import engine, Base, SessionLocal
-    from routers import auth, files, sharing, admin
+    from routers import auth, files, sharing, admin, ai
     from models import User
     from auth.utils import get_password_hash
     from ws_manager import manager
@@ -100,6 +100,7 @@ def read_root():
 app.include_router(auth.router)
 app.include_router(files.router)
 app.include_router(sharing.router)
+app.include_router(ai.router)
 app.include_router(admin.router)
 
 # Only register WebSocket endpoint when NOT on Vercel (Vercel doesn't support WS)
