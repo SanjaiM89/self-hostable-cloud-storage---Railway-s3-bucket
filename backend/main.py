@@ -85,8 +85,12 @@ app = FastAPI(title="Cloud Storage API")
 # CORS: allow all origins without credentials (wildcard + credentials is invalid)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:5173",
+        "https://lazycloudio.vercel.app",
+        "*"
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
