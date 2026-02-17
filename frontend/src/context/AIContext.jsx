@@ -53,7 +53,14 @@ export function AIProvider({ children }) {
                 attachments: attachments
             };
 
-            const response = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/ai/chat`, {
+            // We need to use fetch for streaming, but we must use the correct API URL
+            // api.defaults.baseURL handles it for axios, but here we need to be explicit if using fetch
+            // Or we can use the aiAPI.chat method if we implement streaming there. 
+            // Let's use the API_URL from utils/api.js logic:
+
+            const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+            const response = await fetch(`${API_URL}/ai/chat`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

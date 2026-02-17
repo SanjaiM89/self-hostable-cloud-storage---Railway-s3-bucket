@@ -18,7 +18,7 @@ def extract_text_from_file(file_content: bytes, filename: str, mime_type: str = 
             return _extract_pdf(file_content)
         elif mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or ext == 'docx':
             return _extract_docx(file_content)
-        elif mime_type and mime_type.startswith('text/'):
+        elif ext == 'md' or ext == 'markdown' or (mime_type and mime_type.startswith('text/')):
             return file_content.decode('utf-8', errors='ignore')
         else:
             # Fallback for code files etc

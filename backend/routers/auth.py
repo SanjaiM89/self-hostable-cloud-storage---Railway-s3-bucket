@@ -68,4 +68,10 @@ def me(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"username": user.username, "email": user.email, "is_admin": user.is_admin, "storage_limit": user.storage_limit}
+    return {
+        "username": user.username, 
+        "email": user.email, 
+        "is_admin": user.is_admin, 
+        "storage_limit": user.storage_limit,
+        "ai_config": user.ai_config
+    }

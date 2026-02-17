@@ -42,6 +42,47 @@ async def chat_stream(user_ai_config: dict, messages: list, context_files: list 
                     "content": f"You are a helpful AI assistant integrated into a cloud storage platform.\n{context_text}"
                 })
 
+        # 2a. Process Attachments (Local Parsing)
+        # The user specifically requested local parsing for MD and PDF.
+        # We will extract text and append to the last user message.
+        processed_attachments = []
+        if attachments:
+            attachment_text = ""
+            for att in attachments:
+                filename = att.get('name', 'file')
+                mime = att.get('mime_type', '')
+                ext = filename.split('.')[-1].lower() if '.' in filename else ''
+                
+                # Check if we should parse this locally
+                # User mentioned MD and PDF specifically
+                logger.info(f"Processing attachment: {filename}, ext: {ext}, mime: {mime}")
+                if ext in ['md', 'markdown', 'pdf', 'txt', 'py', 'js', 'html', 'css', 'json']:
+                     # Decode base64 content if needed, but here att should have 'content_base64'
+                     # Wait, extract_text_from_file expects bytes. 
+                     # att from frontend (via providers.py logci) has 'content_base64'.
+                     import base64
+                     try:
+                         file_bytes = base64.b64decode(att['content_base64'])
+                         text = extract_text_from_file(file_bytes, filename, mime)
+                         logger.info(f"Extracted text length: {len(text)}")
+                         attachment_text += f"\n\n--- Attachment: {filename} ---\n{text}\n"
+                     except Exception as e:
+                         logger.error(f"Failed to parse attachment {filename}: {e}")
+                         # If parsing fails, maybe keep it as attachment? 
+                         # For now, just log and skip text injection, let it pass to provider if supported.
+                         processed_attachments.append(att)
+                else:
+                    # Keep as attachment for provider (e.g. images)
+                    processed_attachments.append(att)
+            
+            # Append extracted text to the last user message
+            if attachment_text:
+                # Find last user message
+                for i in range(len(msgs) - 1, -1, -1):
+                    if msgs[i]['role'] == 'user':
+                        msgs[i]['content'] += attachment_text
+                        break
+        
         # 3. Get Provider
         # Default to Gemini if not configured (or handle error)
         config = user_ai_config if user_ai_config else {"provider": "gemini", "api_key": "", "model": "gemini-1.5-flash"}
@@ -52,7 +93,7 @@ async def chat_stream(user_ai_config: dict, messages: list, context_files: list 
         provider = get_provider(config)
         
         # 4. Stream
-        async for chunk in provider.stream_chat(msgs, attachments):
+        async for chunk in provider.stream_chat(msgs, processed_attachments):
             yield chunk
 
     except Exception as e:

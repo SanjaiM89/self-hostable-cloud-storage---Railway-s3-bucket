@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { Save, AlertCircle, CheckCircle } from 'lucide-react';
+import { aiAPI } from '../../utils/api';
 
 export default function AIConfigForm() {
     const { user } = useAuth();
@@ -14,9 +15,18 @@ export default function AIConfigForm() {
     const [msg, setMsg] = useState('');
 
     useEffect(() => {
-        if (user?.ai_config) {
-            setConfig(prev => ({ ...prev, ...user.ai_config }));
-        }
+        // Prefer fetching fresh config, fallback to user context
+        const load = async () => {
+            try {
+                const res = await aiAPI.getConfig();
+                if (res.data) setConfig(prev => ({ ...prev, ...res.data }));
+            } catch (e) {
+                if (user?.ai_config) {
+                    setConfig(prev => ({ ...prev, ...user.ai_config }));
+                }
+            }
+        };
+        load();
     }, [user]);
 
     const handleSubmit = async (e) => {
@@ -25,23 +35,15 @@ export default function AIConfigForm() {
         setMsg('');
 
         try {
-            const res = await fetch(`${import.meta.env.VITE_API_URL || '/api'}/ai/config`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                },
-                body: JSON.stringify(config)
-            });
-
-            if (!res.ok) throw new Error('Failed to save configuration');
+            await aiAPI.updateConfig(config);
 
             setStatus('success');
             setMsg('Configuration saved successfully');
             setTimeout(() => setStatus('idle'), 3000);
         } catch (err) {
             setStatus('error');
-            setMsg(err.message);
+            const detail = err.response?.data?.detail;
+            setMsg(typeof detail === 'string' ? detail : (err.message || 'Failed to save'));
         }
     };
 

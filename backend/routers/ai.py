@@ -78,6 +78,13 @@ async def chat_endpoint(
         media_type="text/plain"
     )
 
+@router.get("/config")
+async def get_ai_config(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    return current_user.ai_config or {}
+
 @router.post("/config")
 async def update_ai_config(
     config: Dict[str, Any],
@@ -93,9 +100,6 @@ async def update_ai_config(
     
     current_user.ai_config = config
     
-    # Force SQLAlchemy to detect change on JSON field if mutating in place
-    # But here we assign a new dict, so it should be fine.
-    # Just in case:
     from sqlalchemy.orm.attributes import flag_modified
     flag_modified(current_user, "ai_config")
     

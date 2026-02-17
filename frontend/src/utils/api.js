@@ -98,16 +98,16 @@ export const filesAPI = {
                 };
             }
             xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error(`S3 upload failed: ${xhr.status}`));
-            xhr.onerror = () => reject(new Error('S3 upload network error'));
+            xhr.onerror = () => reject(new Error('Network error during S3 upload'));
             xhr.send(file);
         });
 
-        // Step 3: Register the file in the database
+        // Step 3: Register file in backend
         return api.post('/files/register', {
-            filename: urlData.filename,
+            filename: file.name,
             s3_key: urlData.s3_key,
             size: file.size,
-            content_type: urlData.content_type,
+            content_type: file.type || 'application/octet-stream',
             parent_id: parentId || null,
         });
     },
@@ -115,7 +115,7 @@ export const filesAPI = {
     createFolder: (name, parentId = null) =>
         api.post('/files/folder', { name, parent_id: parentId }),
     delete: (fileId) => api.delete(`/files/${fileId}`),
-    rename: (fileId, name) => api.patch(`/files/${fileId}`, { name }),
+    rename: (fileId, newName) => api.patch(`/files/${fileId}`, { name: newName }),
     editorConfig: (fileId) => api.get(`/files/editor-config/${fileId}`),
     tree: () => api.get('/files/tree'),
     folderPreview: (folderId) => api.get(`/files/folder-preview/${folderId}`),
@@ -164,4 +164,12 @@ export const adminAPI = {
     updateUserStorage: (userId, storageLimit) => api.patch(`/admin/users/${userId}/storage`, { storage_limit: storageLimit }),
     updateAdminProfile: (payload) => api.patch('/admin/settings/profile', payload),
     updateAdminPassword: (payload) => api.patch('/admin/settings/password', payload),
+};
+
+export const aiAPI = {
+    getConfig: () => api.get('/ai/config'),
+    updateConfig: (config) => api.post('/ai/config', config),
+    chat: (payload) => api.post('/ai/chat', payload, {
+        responseType: 'stream',
+    }),
 };
