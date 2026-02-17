@@ -43,7 +43,7 @@ export default function Navbar({
     };
 
     return (
-        <header className="flex items-center md:h-[58px] px-3 md:px-5 py-2 md:py-0 gap-2 md:gap-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] sticky top-0 z-20 backdrop-blur-sm flex-shrink-0 flex-wrap md:flex-nowrap">
+        <header className="desktop-navbar flex items-center md:h-[58px] px-3 md:px-5 py-2 md:py-0 gap-2 md:gap-3 border-b border-[var(--border-color)] bg-[var(--bg-primary)] sticky top-0 z-20 backdrop-blur-sm flex-shrink-0 flex-wrap md:flex-nowrap">
             {/* Back button for editor */}
             {showBackButton && (
                 <button

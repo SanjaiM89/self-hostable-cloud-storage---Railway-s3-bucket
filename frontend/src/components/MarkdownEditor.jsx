@@ -20,6 +20,7 @@ import { common, createLowlight } from 'lowlight';
 import { Markdown } from 'tiptap-markdown';
 import { filesAPI } from '../utils/api';
 import Loader from './Loader';
+import { useMobile, MobileMdToolbar } from '../mobile';
 import {
     ArrowLeft, Save, Upload as UploadIcon,
     Bold, Italic, Heading1, Heading2, Heading3,
@@ -82,6 +83,7 @@ export default function MarkdownEditor({ file, onClose }) {
     const pendingUploadsRef = useRef({});
     const saveTimerRef = useRef(null);
     const editorRef = useRef(null);
+    const isMobile = useMobile();
 
     // ─── 1. Helpers (no editor dependency) ───
     const persistPendingUploads = useCallback(() => {
@@ -375,77 +377,87 @@ export default function MarkdownEditor({ file, onClose }) {
             '--md-font-size': `${fontSize}px`,
         }}>
             {/* ─── Toolbar ─── */}
-            <div className="editor-toolbar">
-                <button onClick={handleClose} style={toolBtnStyle} title="Back"><ArrowLeft size={18} /></button>
-                <div className="toolbar-sep" />
-                <span className="font-semibold text-sm truncate max-w-[160px] mr-3">{file.name}</span>
+            {/* ─── Toolbar ─── */}
+            {isMobile ? (
+                <MobileMdToolbar
+                    editor={editor}
+                    onSave={() => editor && saveContent(editor.storage.markdown.getMarkdown())}
+                    saveStatus={saveStatus}
+                    onImageUpload={() => document.getElementById('md-image-upload').click()}
+                />
+            ) : (
+                <div className="editor-toolbar">
+                    <button onClick={handleClose} style={toolBtnStyle} title="Back"><ArrowLeft size={18} /></button>
+                    <div className="toolbar-sep" />
+                    <span className="font-semibold text-sm truncate max-w-[160px] mr-3">{file.name}</span>
 
-                {/* Text Formatting */}
-                <TBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} icon={<Bold size={15} />} title="Bold" />
-                <TBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} icon={<Italic size={15} />} title="Italic" />
-                <TBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} icon={<UnderlineIcon size={15} />} title="Underline" />
-                <TBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} icon={<Strikethrough size={15} />} title="Strikethrough" />
-                <TBtn onClick={() => editor.chain().focus().toggleHighlight().run()} active={editor.isActive('highlight')} icon={<Highlighter size={15} />} title="Highlight" />
-                <TBtn onClick={() => editor.chain().focus().toggleSubscript().run()} active={editor.isActive('subscript')} icon={<SubIcon size={15} />} title="Subscript (x₂)" />
-                <TBtn onClick={() => editor.chain().focus().toggleSuperscript().run()} active={editor.isActive('superscript')} icon={<SupIcon size={15} />} title="Superscript (x²)" />
+                    {/* Text Formatting */}
+                    <TBtn onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive('bold')} icon={<Bold size={15} />} title="Bold" />
+                    <TBtn onClick={() => editor.chain().focus().toggleItalic().run()} active={editor.isActive('italic')} icon={<Italic size={15} />} title="Italic" />
+                    <TBtn onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive('underline')} icon={<UnderlineIcon size={15} />} title="Underline" />
+                    <TBtn onClick={() => editor.chain().focus().toggleStrike().run()} active={editor.isActive('strike')} icon={<Strikethrough size={15} />} title="Strikethrough" />
+                    <TBtn onClick={() => editor.chain().focus().toggleHighlight().run()} active={editor.isActive('highlight')} icon={<Highlighter size={15} />} title="Highlight" />
+                    <TBtn onClick={() => editor.chain().focus().toggleSubscript().run()} active={editor.isActive('subscript')} icon={<SubIcon size={15} />} title="Subscript (x₂)" />
+                    <TBtn onClick={() => editor.chain().focus().toggleSuperscript().run()} active={editor.isActive('superscript')} icon={<SupIcon size={15} />} title="Superscript (x²)" />
 
-                <div className="toolbar-sep" />
+                    <div className="toolbar-sep" />
 
-                {/* Headings */}
-                <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} icon={<Heading1 size={15} />} title="Heading 1" />
-                <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive('heading', { level: 2 })} icon={<Heading2 size={15} />} title="Heading 2" />
-                <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} active={editor.isActive('heading', { level: 3 })} icon={<Heading3 size={15} />} title="Heading 3" />
+                    {/* Headings */}
+                    <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} active={editor.isActive('heading', { level: 1 })} icon={<Heading1 size={15} />} title="Heading 1" />
+                    <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive('heading', { level: 2 })} icon={<Heading2 size={15} />} title="Heading 2" />
+                    <TBtn onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} active={editor.isActive('heading', { level: 3 })} icon={<Heading3 size={15} />} title="Heading 3" />
 
-                <div className="toolbar-sep" />
+                    <div className="toolbar-sep" />
 
-                {/* Lists & Blocks */}
-                <TBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} icon={<List size={15} />} title="Bullet List" />
-                <TBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} icon={<ListOrdered size={15} />} title="Numbered List" />
-                <TBtn onClick={() => editor.chain().focus().toggleTaskList().run()} active={editor.isActive('taskList')} icon={<ListChecks size={15} />} title="Task List (Checkboxes)" />
-                <TBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} icon={<Quote size={15} />} title="Blockquote" />
-                <TBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} icon={<Code size={15} />} title="Code Block" />
-                <TBtn onClick={() => editor.chain().focus().setHorizontalRule().run()} icon={<Minus size={15} />} title="Horizontal Rule" />
+                    {/* Lists & Blocks */}
+                    <TBtn onClick={() => editor.chain().focus().toggleBulletList().run()} active={editor.isActive('bulletList')} icon={<List size={15} />} title="Bullet List" />
+                    <TBtn onClick={() => editor.chain().focus().toggleOrderedList().run()} active={editor.isActive('orderedList')} icon={<ListOrdered size={15} />} title="Numbered List" />
+                    <TBtn onClick={() => editor.chain().focus().toggleTaskList().run()} active={editor.isActive('taskList')} icon={<ListChecks size={15} />} title="Task List (Checkboxes)" />
+                    <TBtn onClick={() => editor.chain().focus().toggleBlockquote().run()} active={editor.isActive('blockquote')} icon={<Quote size={15} />} title="Blockquote" />
+                    <TBtn onClick={() => editor.chain().focus().toggleCodeBlock().run()} active={editor.isActive('codeBlock')} icon={<Code size={15} />} title="Code Block" />
+                    <TBtn onClick={() => editor.chain().focus().setHorizontalRule().run()} icon={<Minus size={15} />} title="Horizontal Rule" />
 
-                <div className="toolbar-sep" />
+                    <div className="toolbar-sep" />
 
-                {/* Rich Content */}
-                <TBtn onClick={handleLinkInsert} active={editor.isActive('link')} icon={<LinkIcon size={15} />} title="Insert Link" />
-                <TBtn onClick={handleImageBtnClick} icon={<ImageIcon size={15} />} title="Insert Image" />
-                <TBtn onClick={handleTableInsert} icon={<TableIcon size={15} />} title="Insert Table (3×3)" />
+                    {/* Rich Content */}
+                    <TBtn onClick={handleLinkInsert} active={editor.isActive('link')} icon={<LinkIcon size={15} />} title="Insert Link" />
+                    <TBtn onClick={handleImageBtnClick} icon={<ImageIcon size={15} />} title="Insert Image" />
+                    <TBtn onClick={handleTableInsert} icon={<TableIcon size={15} />} title="Insert Table (3×3)" />
 
-                <div className="toolbar-sep" />
+                    <div className="toolbar-sep" />
 
-                {/* Text Size */}
-                <label className="text-xs text-[var(--text-secondary)] whitespace-nowrap">Size</label>
-                <select value={fontSize} onChange={(e) => {
-                    const next = Number(e.target.value);
-                    setFontSize(next);
-                    localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next));
-                    if (editor) {
-                        const md = editor.storage.markdown.getMarkdown();
-                        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                        saveTimerRef.current = setTimeout(() => saveContent(md), 400);
-                    }
-                }} className="h-7 px-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs">
-                    {[14, 16, 18, 20, 22, 24].map(s => <option key={s} value={s}>{s}px</option>)}
-                </select>
+                    {/* Text Size */}
+                    <label className="text-xs text-[var(--text-secondary)] whitespace-nowrap">Size</label>
+                    <select value={fontSize} onChange={(e) => {
+                        const next = Number(e.target.value);
+                        setFontSize(next);
+                        localStorage.setItem(FONT_SIZE_STORAGE_KEY, String(next));
+                        if (editor) {
+                            const md = editor.storage.markdown.getMarkdown();
+                            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                            saveTimerRef.current = setTimeout(() => saveContent(md), 400);
+                        }
+                    }} className="h-7 px-1.5 rounded-md border border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-primary)] text-xs">
+                        {[14, 16, 18, 20, 22, 24].map(s => <option key={s} value={s}>{s}px</option>)}
+                    </select>
 
-                <div className="flex-1" />
+                    <div className="flex-1" />
 
-                {/* Undo/Redo */}
-                <TBtn onClick={() => editor.chain().focus().undo().run()} icon={<Undo size={15} />} title="Undo" />
-                <TBtn onClick={() => editor.chain().focus().redo().run()} icon={<Redo size={15} />} title="Redo" />
+                    {/* Undo/Redo */}
+                    <TBtn onClick={() => editor.chain().focus().undo().run()} icon={<Undo size={15} />} title="Undo" />
+                    <TBtn onClick={() => editor.chain().focus().redo().run()} icon={<Redo size={15} />} title="Redo" />
 
-                {/* Save Badge */}
-                <button
-                    onClick={() => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); saveContent(editor.storage.markdown.getMarkdown()); }}
-                    className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium ml-2"
-                    style={{ color: badge.color, background: badge.bg }}
-                    title="Save now (Ctrl+S)"
-                >
-                    <span className="text-[10px]">{badge.icon}</span>{badge.text}
-                </button>
-            </div>
+                    {/* Save Badge */}
+                    <button
+                        onClick={() => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); saveContent(editor.storage.markdown.getMarkdown()); }}
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium ml-2"
+                        style={{ color: badge.color, background: badge.bg }}
+                        title="Save now (Ctrl+S)"
+                    >
+                        <span className="text-[10px]">{badge.icon}</span>{badge.text}
+                    </button>
+                </div>
+            )}
 
             {/* ─── Editor Content ─── */}
             <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent bg-[var(--bg-primary)]">

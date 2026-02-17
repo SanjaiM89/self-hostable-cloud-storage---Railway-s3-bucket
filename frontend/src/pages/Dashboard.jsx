@@ -17,6 +17,7 @@ import MediaViewerModal from '../components/MediaViewerModal';
 import { uploadFolder } from '../utils/folderUpload';
 import SearchModal from '../components/SearchModal';
 import Loader from '../components/Loader';
+import { useMobile, MobileNav, MobileActionSheet, MobileMediaViewer } from '../mobile';
 
 
 function normalizeListResponse(payload) {
@@ -44,6 +45,9 @@ export default function Dashboard() {
     const [viewScope, setViewScope] = useState('files');
     const [selectedFiles, setSelectedFiles] = useState([]);
     const [searchOpen, setSearchOpen] = useState(false);
+    const [mobileActionFile, setMobileActionFile] = useState(null);
+    const [shareFile, setShareFile] = useState(null);
+    const isMobile = useMobile();
 
     // Inline editor state
     const [editingFile, setEditingFile] = useState(null);
@@ -463,18 +467,20 @@ export default function Dashboard() {
     }, [files, deferredSearchQuery]);
 
     return (
-        <div className="flex h-screen bg-[var(--bg-primary)] transition-colors duration-200">
-            <Sidebar
-                currentFolder={currentFolder}
-                onNavigate={handleNavigate}
-                onCreateFolder={handleCreateFolder}
-                onUpload={handleUpload}
-                onCreateDocument={handleCreateDocument}
-                onOpenTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
-                onOpenSearch={() => setSearchOpen(true)}
-                collapsed={sidebarCollapsed}
-                onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
-            />
+        <div className="flex h-screen bg-[var(--bg-primary)] transition-colors duration-200 main-content-area">
+            <div className="desktop-sidebar">
+                <Sidebar
+                    currentFolder={currentFolder}
+                    onNavigate={handleNavigate}
+                    onCreateFolder={handleCreateFolder}
+                    onUpload={handleUpload}
+                    onCreateDocument={handleCreateDocument}
+                    onOpenTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
+                    onOpenSearch={() => setSearchOpen(true)}
+                    collapsed={sidebarCollapsed}
+                    onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
+                />
+            </div>
 
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <Navbar
@@ -641,6 +647,8 @@ export default function Dashboard() {
                                     onCreateDocument={handleCreateDocument}
                                     onRefresh={fetchFiles}
                                     onSelectionChange={setSelectedFiles}
+                                    onMobileAction={isMobile ? setMobileActionFile : undefined}
+                                    onShare={setShareFile}
                                 />
                             )}
                         </div>
@@ -655,12 +663,24 @@ export default function Dashboard() {
                         onOpenResult={(item) => handleOpenFile(item)}
                     />
 
-                    {mediaFile && (
+                    {shareFile && (
+                        <ShareModal
+                            file={shareFile}
+                            onClose={() => setShareFile(null)}
+                        />
+                    )}
+
+                    {mediaFile && (isMobile ? (
+                        <MobileMediaViewer
+                            file={mediaFile}
+                            onClose={() => setMediaFile(null)}
+                        />
+                    ) : (
                         <MediaViewerModal
                             file={mediaFile}
                             onClose={() => setMediaFile(null)}
                         />
-                    )}
+                    ))}
 
                     {/* Activity Bar */}
                     <ActivityBar
@@ -670,6 +690,33 @@ export default function Dashboard() {
                     />
                 </div>
             </main>
+
+            {/* Mobile bottom nav */}
+            {isMobile && (
+                <MobileNav
+                    activeTab={viewScope === 'trash' ? 'trash' : 'home'}
+                    onHome={() => { setViewScope('files'); handleNavigate(null, 'Home'); }}
+                    onSearch={() => setSearchOpen(true)}
+                    onUpload={handleUpload}
+                    onCreateFolder={handleCreateFolder}
+                    onCreateDocument={handleCreateDocument}
+                    onTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
+                    onNavigateSettings={() => navigate('/settings')}
+                />
+            )}
+
+            {/* Mobile action sheet */}
+            {mobileActionFile && (
+                <MobileActionSheet
+                    file={mobileActionFile}
+                    onClose={() => setMobileActionFile(null)}
+                    onDownload={handleDownload}
+                    onRename={handleRename}
+                    onDelete={handleDelete}
+                    onShare={(f) => { setMobileActionFile(null); setShareFile(f); }}
+                    onExtract={handleExtract}
+                />
+            )}
         </div>
     );
 }
