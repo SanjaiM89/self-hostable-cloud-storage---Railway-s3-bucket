@@ -20,7 +20,7 @@ except ImportError:
 
 
 def ensure_schema_updates():
-    with engine.begin() as conn:
+    with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
         try:
             conn.execute(text("ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE"))
         except Exception:
