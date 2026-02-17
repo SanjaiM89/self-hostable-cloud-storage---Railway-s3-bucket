@@ -41,6 +41,11 @@ def ensure_schema_updates():
             conn.execute(text("ALTER TABLE files ADD COLUMN original_parent_id INTEGER NULL"))
         except Exception:
             pass
+        try:
+            # PostgreSQL specific JSONB or JSON
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_config JSON DEFAULT '{}'"))
+        except Exception:
+            pass
 
 
 def ensure_default_admin_user():
