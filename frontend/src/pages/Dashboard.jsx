@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import InputModal from '../components/InputModal';
+
 import { useWebSocket } from '../context/WebSocketContext';
-import { motion, AnimatePresence } from 'framer-motion';
 import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import FileGrid from '../components/FileGrid';
@@ -18,6 +18,8 @@ import { uploadFolder } from '../utils/folderUpload';
 import SearchModal from '../components/SearchModal';
 import Loader from '../components/Loader';
 import { useMobile, MobileNav, MobileActionSheet, MobileMediaViewer } from '../mobile';
+import ShareModal from '../components/ShareModal';
+import SelectionBar from '../components/SelectionBar';
 
 
 function normalizeListResponse(payload) {
@@ -43,10 +45,13 @@ export default function Dashboard() {
     const [activityOpen, setActivityOpen] = useState(false);
     const [activities, setActivities] = useState([]);
     const [viewScope, setViewScope] = useState('files');
-    const [selectedFiles, setSelectedFiles] = useState([]);
+    const [selectedIds, setSelectedIds] = useState([]);
+    const selectedFiles = files ? files.filter(f => selectedIds.includes(f.id)) : [];
     const [searchOpen, setSearchOpen] = useState(false);
     const [mobileActionFile, setMobileActionFile] = useState(null);
     const [shareFile, setShareFile] = useState(null);
+    const [clipboard, setClipboard] = useState({ op: null, items: [] });
+    const [inputModal, setInputModal] = useState(null);
     const isMobile = useMobile();
 
     // Inline editor state
@@ -70,19 +75,18 @@ export default function Dashboard() {
     const fetchFiles = useCallback(async () => {
         setLoading(true);
 
-        // Try load from cache first
+        // Always try to load from cache first to show something immediately
         const cacheKey = `files_cache_${currentFolder || 'root'}_${viewScope}`;
-        if (!hasLoadedOnce) {
-            try {
-                const cached = localStorage.getItem(cacheKey);
-                if (cached) {
-                    const parsed = JSON.parse(cached);
-                    setFiles(parsed);
-                    setHasLoadedOnce(true);
-                    setLoading(false); // Show cached immediately
-                }
-            } catch (e) { }
-        }
+        try {
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                setFiles(parsed);
+                // We set hasLoadedOnce to true immediately if we have cached data
+                // This prevents the skeleton loader from showing
+                setHasLoadedOnce(true);
+            }
+        } catch (e) { }
 
         try {
             const pageSize = 50;
@@ -115,9 +119,13 @@ export default function Dashboard() {
         } finally {
             setLoading(false);
         }
-    }, [currentFolder, viewScope, hasLoadedOnce]);
+    }, [currentFolder, viewScope]);
+
+    // Actually, we want to fetch everytime currentFolder changes, so dependencies are correct.
 
     useEffect(() => { fetchFiles(); }, [fetchFiles]);
+
+
 
     // WebSocket Subscription
     useEffect(() => {
@@ -453,6 +461,98 @@ export default function Dashboard() {
 
     // ─── Filtered & sorted files ───
     const deferredSearchQuery = useDeferredValue(searchQuery);
+
+    // ─── Batch Operations ───
+    const handleBatchDelete = async () => {
+        if (!window.confirm(`Delete ${selectedFiles.length} items?`)) return;
+        try {
+            await filesAPI.batchDelete(selectedIds);
+            setSelectedIds([]);
+            fetchFiles();
+        } catch (err) {
+            console.error('Batch delete failed:', err);
+            alert('Failed to delete items');
+        }
+    };
+
+    const handleBatchCopy = () => {
+        setClipboard({ op: 'copy', items: [...selectedFiles] });
+        setSelectedIds([]);
+    };
+
+    const handleBatchMove = () => {
+        setClipboard({ op: 'move', items: [...selectedFiles] });
+        setSelectedIds([]);
+    };
+
+    const handlePaste = async () => {
+        if (!clipboard.items.length || !clipboard.op) return;
+        const targetId = currentFolder ? Number(currentFolder) : null;
+        // items are objects, so valid id access
+        const ids = clipboard.items.map(f => Number(f.id));
+
+        const opType = clipboard.op; // 'copy' or 'move'
+        const opName = opType === 'copy' ? 'Copying' : 'Moving';
+
+        let activityName;
+        if (clipboard.items.length === 1) {
+            activityName = `${opName} "${clipboard.items[0].name}"`;
+        } else {
+            activityName = `${opName} ${clipboard.items.length} items`;
+        }
+
+        const aid = addActivity(opType, activityName);
+
+        try {
+            console.log('Paste payload:', { ids, targetId, op: clipboard.op });
+            if (clipboard.op === 'copy') {
+                await filesAPI.batchCopy(ids, targetId);
+            } else {
+                await filesAPI.batchMove(ids, targetId);
+            }
+            updateActivity(aid, { status: 'done', percent: 100 });
+            fetchFiles();
+            setClipboard({ op: null, items: [] });
+        } catch (err) {
+            console.error('Paste failed:', err);
+            updateActivity(aid, { status: 'error' });
+            const detail = err.response?.data?.detail;
+            alert(`Failed to paste items: ${JSON.stringify(detail) || err.message}`);
+        }
+    };
+
+    const handleNewFolderWithSelection = () => {
+        setInputModal({
+            title: 'Group Selection',
+            placeholder: 'Enter folder name...',
+            onConfirm: async (name) => {
+                setInputModal(null);
+                if (!name) return;
+
+                const aid = addActivity('group', `Grouping ${selectedIds.length} items into "${name}"`);
+
+                try {
+                    // 1. Create Folder
+                    const res = await filesAPI.createFolder(name, currentFolder);
+                    const newFolderId = res.data.id;
+
+                    // 2. Move files into it
+                    await filesAPI.batchMove(selectedIds, newFolderId);
+
+                    updateActivity(aid, { status: 'done', percent: 100 });
+
+                    setSelectedIds([]);
+                    fetchFiles();
+                } catch (err) {
+                    console.error('Group failed:', err);
+                    updateActivity(aid, { status: 'error' });
+                    alert('Failed to create folder with selection');
+                }
+            }
+        });
+    };
+
+
     const sortedFiles = useMemo(() => {
         const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
         const filteredFiles = normalizedQuery
@@ -610,13 +710,8 @@ export default function Dashboard() {
                         )}
 
                         {/* File Grid — hidden when editor is open */}
-                        <div className="px-5 py-4 smooth-panel" style={{ display: (editingFile || markdownFile || pdfFile) ? 'none' : 'block' }}>
-                            {loading && hasLoadedOnce && (
-                                <div className="mb-3 inline-flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-1.5 text-xs text-[var(--text-secondary)]">
-                                    <Loader className="scale-50" />
-                                    Refreshing files...
-                                </div>
-                            )}
+                        <div className="px-5 py-4 smooth-panel flex-1 h-full" style={{ display: (editingFile || markdownFile || pdfFile) ? 'none' : 'block' }}>
+
 
                             {viewScope === 'trash' && (
                                 <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
@@ -646,15 +741,19 @@ export default function Dashboard() {
                                     onUpload={handleUpload}
                                     onCreateDocument={handleCreateDocument}
                                     onRefresh={fetchFiles}
-                                    onSelectionChange={setSelectedFiles}
+                                    selectedIds={selectedIds}
+                                    onSelectionChange={setSelectedIds}
                                     onMobileAction={isMobile ? setMobileActionFile : undefined}
                                     onShare={setShareFile}
+                                    clipboardState={clipboard}
+                                    onPaste={handlePaste}
                                 />
                             )}
                         </div>
                     </div>
 
                     {/* Modals */}
+                    {inputModal && <InputModal {...inputModal} onCancel={() => setInputModal(null)} />}
                     <SearchModal
                         open={searchOpen}
                         onClose={() => setSearchOpen(false)}
@@ -717,6 +816,18 @@ export default function Dashboard() {
                     onExtract={handleExtract}
                 />
             )}
+
+            <SelectionBar
+                selectedCount={selectedFiles.length}
+                onClear={() => setSelectedIds([])}
+                onDelete={handleBatchDelete}
+                onCopy={handleBatchCopy}
+                onMove={handleBatchMove}
+                onNewFolderWithSelection={handleNewFolderWithSelection}
+                clipboardState={clipboard}
+                onPaste={handlePaste}
+                onCancelPaste={() => setClipboard({ op: null, items: [] })}
+            />
         </div>
     );
 }

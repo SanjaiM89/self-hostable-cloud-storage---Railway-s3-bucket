@@ -4,7 +4,7 @@ import {
     File, FileText, Image, Film, Music, Archive, Code,
     Folder, FolderOpen, MoreVertical, Download, Pencil, Trash2,
     FileSpreadsheet, FileImage, Presentation, FolderPlus, Upload,
-    FileType, Sheet, MonitorPlay, PackageOpen, RefreshCw, Share2
+    FileType, Sheet, MonitorPlay, PackageOpen, RefreshCw, Share2, Clipboard
 } from 'lucide-react';
 import { filesAPI } from '../utils/api';
 import ShareModal from './ShareModal';
@@ -267,13 +267,12 @@ export default function FileGrid({
 
     onMobileAction,
     onShare,
+    selectedIds,
 }) {
     const [ctxMenu, setCtxMenu] = useState(null);
-    const [inputModal, setInputModal] = useState(null); // { title, placeholder, defaultValue, onConfirm }
-    // const [shareModal, setShareModal] = useState(null); // REMOVED: Hoisted to Dashboard
+    const [inputModal, setInputModal] = useState(null);
     const fileInputRef = useRef(null);
     const rootRef = useRef(null);
-    const [selectedIds, setSelectedIds] = useState([]);
     const [selectionRect, setSelectionRect] = useState(null);
     const dragStartRef = useRef(null);
     const isMobile = useMobile();
@@ -284,6 +283,26 @@ export default function FileGrid({
             onMobileAction(file);
             return;
         }
+
+        // Handle Selection on Right Click
+        if (file) {
+            const isSelected = selectedIds.includes(file.id);
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl + Right Click: Toggle selection
+                const newSelection = isSelected
+                    ? selectedIds.filter(id => id !== file.id)
+                    : [...selectedIds, file.id];
+                onSelectionChange(newSelection);
+            } else {
+                // Normal Right Click
+                // If item is NOT selected, select it (exclusive)
+                // If item IS selected, keep selection (so we can act on the group)
+                if (!isSelected) {
+                    onSelectionChange([file.id]);
+                }
+            }
+        }
+
         const items = [];
 
         if (file) {
@@ -365,18 +384,18 @@ export default function FileGrid({
         e.target.value = '';
     };
 
-
-    useEffect(() => {
-        onSelectionChange?.(files.filter((f) => selectedIds.includes(f.id)));
-    }, [selectedIds, files, onSelectionChange]);
+    // REMOVED local state sync effect
 
     const handleItemClick = (e, file) => {
         if (e.ctrlKey || e.metaKey) {
-            setSelectedIds((prev) => prev.includes(file.id) ? prev.filter((id) => id !== file.id) : [...prev, file.id]);
+            const newSelection = selectedIds.includes(file.id)
+                ? selectedIds.filter((id) => id !== file.id)
+                : [...selectedIds, file.id];
+            onSelectionChange(newSelection);
             return;
         }
         if (selectedIds.length > 0) {
-            setSelectedIds([file.id]);
+            onSelectionChange([file.id]);
             return;
         }
         onOpen(file);
@@ -386,27 +405,59 @@ export default function FileGrid({
         if (e.button !== 0 || e.target.closest('.file-card')) return;
         const bounds = rootRef.current?.getBoundingClientRect();
         if (!bounds) return;
-        dragStartRef.current = { x: e.clientX, y: e.clientY, bounds };
-        setSelectedIds([]);
-        setSelectionRect({ left: e.clientX, top: e.clientY, width: 0, height: 0 });
+
+        // Calculate relative coordinates including scroll
+        const x = e.clientX - bounds.left + rootRef.current.scrollLeft;
+        const y = e.clientY - bounds.top + rootRef.current.scrollTop;
+
+        dragStartRef.current = {
+            x,
+            y,
+            initialScrollLeft: rootRef.current.scrollLeft,
+            initialScrollTop: rootRef.current.scrollTop,
+            bounds
+        };
+        // Clear selection on click background
+        onSelectionChange([]);
+        setSelectionRect({ left: x, top: y, width: 0, height: 0 });
     };
 
     const onMouseMoveCapture = (e) => {
         if (!dragStartRef.current || !rootRef.current) return;
+
+        const bounds = rootRef.current.getBoundingClientRect();
+        const currentX = e.clientX - bounds.left + rootRef.current.scrollLeft;
+        const currentY = e.clientY - bounds.top + rootRef.current.scrollTop;
+
         const start = dragStartRef.current;
-        const left = Math.min(start.x, e.clientX);
-        const top = Math.min(start.y, e.clientY);
-        const width = Math.abs(e.clientX - start.x);
-        const height = Math.abs(e.clientY - start.y);
+
+        const left = Math.min(start.x, currentX);
+        const top = Math.min(start.y, currentY);
+        const width = Math.abs(currentX - start.x);
+        const height = Math.abs(currentY - start.y);
+
         setSelectionRect({ left, top, width, height });
 
+        const startX = start.x; // These are already relative
+        const startY = start.y;
+
+        // Check intersection with relative coordinates
+        // We need to compare relative selection rect with relative card positions
         const rect = { left, top, right: left + width, bottom: top + height };
+
         const cards = Array.from(rootRef.current.querySelectorAll('.file-card[data-file-id]'));
         const hit = cards.filter((el) => {
-            const r = el.getBoundingClientRect();
-            return !(rect.right < r.left || rect.left > r.right || rect.bottom < r.top || rect.top > r.bottom);
+            // Get card position relative to container
+            const cardBounds = el.getBoundingClientRect();
+            const cardLeft = cardBounds.left - bounds.left + rootRef.current.scrollLeft;
+            const cardTop = cardBounds.top - bounds.top + rootRef.current.scrollTop;
+            const cardRight = cardLeft + cardBounds.width;
+            const cardBottom = cardTop + cardBounds.height;
+
+            return !(rect.right < cardLeft || rect.left > cardRight || rect.bottom < cardTop || rect.top > cardBottom);
         }).map((el) => Number(el.dataset.fileId));
-        setSelectedIds(hit);
+
+        onSelectionChange(hit);
     };
 
     const onMouseUpCapture = () => {
@@ -450,7 +501,7 @@ export default function FileGrid({
     return (
         <div
             ref={rootRef}
-            className="min-h-[400px] pb-20 relative"
+            className="min-h-[400px] h-full pb-20 relative"
             onContextMenu={handleBgContextMenu}
             onMouseDown={onMouseDownCapture}
             onMouseMove={onMouseMoveCapture}
@@ -481,7 +532,7 @@ export default function FileGrid({
 
             {ctxMenu && <ContextMenu x={ctxMenu.x} y={ctxMenu.y} items={ctxMenu.items} onClose={() => setCtxMenu(null)} />}
             {inputModal && <InputModal {...inputModal} onCancel={() => setInputModal(null)} />}
-            {selectionRect && <div className="fixed border border-[var(--accent)] bg-[var(--accent-light)] pointer-events-none z-30" style={{ left: selectionRect.left, top: selectionRect.top, width: selectionRect.width, height: selectionRect.height }} />}
+            {selectionRect && <div className="absolute border border-[var(--accent)] bg-[var(--accent-light)] pointer-events-none z-30" style={{ left: selectionRect.left, top: selectionRect.top, width: selectionRect.width, height: selectionRect.height }} />}
             {/* ShareModal hoisted to Dashboard */}
         </div>
     );

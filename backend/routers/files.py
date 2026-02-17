@@ -54,6 +54,143 @@ class FileRename(BaseModel):
     name: str
 
 
+class BatchRequest(BaseModel):
+    file_ids: List[int]
+    target_parent_id: Optional[int] = None
+
+@router.post("/batch/delete")
+async def batch_delete(
+    req: BatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Batch move to trash.
+    """
+    files = db.query(FileModel).filter(
+        FileModel.id.in_(req.file_ids),
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False
+    ).all()
+
+    trashed_at = datetime.datetime.utcnow()
+    affected_parents = set()
+
+    for file in files:
+        affected_parents.add(file.parent_id)
+        _trash_item(file, current_user.username, trashed_at, db)
+    
+    db.commit()
+
+    # Broadcast updates
+    for pid in affected_parents:
+        await manager.broadcast({"type": "refresh", "folder_id": pid})
+    await manager.broadcast({"type": "refresh_trash"})
+
+    return {"message": f"Moved {len(files)} items to trash"}
+
+@router.post("/batch/move")
+async def batch_move(
+    req: BatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Batch move files/folders to a new parent.
+    """
+    files = db.query(FileModel).filter(
+        FileModel.id.in_(req.file_ids),
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False
+    ).all()
+
+    source_parents = set()
+    for file in files:
+        # Prevent moving a folder into itself or its children
+        if file.is_folder and req.target_parent_id:
+             # This check is expensive if we do full tree traversal, 
+             # but simple check: if target_parent_id is same as file.id, fail.
+             if file.id == req.target_parent_id:
+                 continue # Skip invalid move
+
+        source_parents.add(file.parent_id)
+        file.parent_id = req.target_parent_id
+    
+    db.commit()
+
+    # Broadcast updates
+    for pid in source_parents:
+        await manager.broadcast({"type": "refresh", "folder_id": pid})
+    await manager.broadcast({"type": "refresh", "folder_id": req.target_parent_id})
+
+    return {"message": f"Moved {len(files)} items"}
+
+@router.post("/batch/copy")
+async def batch_copy(
+    req: BatchRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Batch copy files/folders to a new parent.
+    """
+    files = db.query(FileModel).filter(
+        FileModel.id.in_(req.file_ids),
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False
+    ).all()
+
+    count = 0
+    for file in files:
+        if file.id == req.target_parent_id:
+            continue
+        _copy_recursive(file, req.target_parent_id, current_user, db)
+        count += 1
+    
+    db.commit()
+    await manager.broadcast({"type": "refresh", "folder_id": req.target_parent_id})
+
+    return {"message": f"Copied {count} items"}
+
+def _copy_recursive(file: FileModel, target_parent_id: Optional[int], user: User, db: Session):
+    # Create new file entry
+    new_s3_key = None
+    if not file.is_folder and file.s3_key:
+        # Copy in S3
+        file_ext = os.path.splitext(file.name)[1]
+        new_key = f"{user.username}/{uuid.uuid4()}{file_ext}"
+        try:
+            s3_client.copy_object(
+                Bucket=BUCKET_NAME,
+                CopySource={"Bucket": BUCKET_NAME, "Key": file.s3_key},
+                Key=new_key
+            )
+            new_s3_key = new_key
+        except Exception as e:
+            print(f"S3 Copy failed: {e}")
+            return # Skip this file if S3 fails
+            
+    new_file = FileModel(
+        name=file.name, # Should we handle name collision? "Copy of..."? For now, allow duplicate names
+        s3_key=new_s3_key,
+        size=file.size,
+        mime_type=file.mime_type,
+        is_folder=file.is_folder,
+        parent_id=target_parent_id,
+        user_id=user.id
+    )
+    db.add(new_file)
+    db.flush() # Get ID
+
+    if file.is_folder:
+        children = db.query(FileModel).filter(
+            FileModel.parent_id == file.id, 
+            FileModel.is_trashed == False
+        ).all()
+        for child in children:
+            _copy_recursive(child, new_file.id, user, db)
+
+
 @router.get("/")
 def list_files(
     parent_id: Optional[int] = Query(default=None),

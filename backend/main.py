@@ -2,6 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+# ... (database imports)
+
+# ... (ensure_schema_updates function)
+
+# ... (app = FastAPI() definition - need to find where it is)
+
+# Iterate to find app definition
+
 from sqlalchemy import inspect, text
 import os
 
@@ -44,8 +54,8 @@ def ensure_schema_updates():
         try:
             # PostgreSQL specific JSONB or JSON
             conn.execute(text("ALTER TABLE users ADD COLUMN ai_config JSON DEFAULT '{}'"))
-        except Exception as e:
-            print(f"Migration Error (ai_config): {e}")
+        except Exception:
+            pass
 
 
 def ensure_default_admin_user():

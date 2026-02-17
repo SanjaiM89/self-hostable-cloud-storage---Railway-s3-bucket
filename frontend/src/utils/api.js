@@ -134,6 +134,9 @@ export const filesAPI = {
     trashPaginated: (limit = 50, offset = 0) => api.get('/files/trash', { params: { limit, offset } }),
     restoreFromTrash: (fileId) => api.post(`/files/trash/restore/${fileId}`),
     emptyTrash: () => api.delete('/files/trash/empty'),
+    batchDelete: (fileIds) => api.post('/files/batch/delete', { file_ids: fileIds }),
+    batchMove: (fileIds, targetId) => api.post('/files/batch/move', { file_ids: fileIds, target_parent_id: targetId }),
+    batchCopy: (fileIds, targetId) => api.post('/files/batch/copy', { file_ids: fileIds, target_parent_id: targetId }),
 };
 
 export const sharesAPI = {
