@@ -7,7 +7,10 @@ from pydantic import BaseModel
 from database import get_db
 from models import User
 from auth.auth import get_current_user
-from ai.service import chat_stream
+try:
+    from ..ai.service import chat_stream
+except ImportError:
+    from ai.service import chat_stream
 
 router = APIRouter(
     prefix="/ai",
