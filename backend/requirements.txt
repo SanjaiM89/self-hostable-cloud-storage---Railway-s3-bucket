@@ -16,4 +16,4 @@ openpyxl
 python-pptx
 PyJWT
 pypdf
-google-generativeai
+

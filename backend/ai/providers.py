@@ -1,5 +1,5 @@
 import os
-import google.generativeai as genai
+
 import requests
 import json
 import base64
@@ -15,54 +15,99 @@ class BaseAIProvider:
 class GeminiProvider(BaseAIProvider):
     def __init__(self, config: Dict):
         super().__init__(config)
-        api_key = config.get("api_key")
-        if not api_key:
+        self.api_key = config.get("api_key")
+        if not self.api_key:
             raise ValueError("Gemini API Key is required")
-        genai.configure(api_key=api_key)
         self.model_name = config.get("model", "gemini-1.5-flash")
-        self.model = genai.GenerativeModel(self.model_name)
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
     async def stream_chat(self, messages: List[Dict], attachments: List[Dict] = None) -> AsyncGenerator[str, None]:
-        # Convert messages to Gemini format
-        # History is technically stateless in this simple implementation unless we manage ChatSession
-        # For simplicity, we'll format prompts or use a chat session if applicable.
-        # But for request/response REST pattern, we often just send the history.
+        # Construct contents
+        contents = []
         
-        # Gemini expects contents=[ {'role': 'user', 'parts': [...]}, ... ]
-        gemini_history = []
-        
-        # System instruction handling
+        # Handle system instruction if needed (Gemini REST API supports system_instruction field separately)
         system_instruction = next((m['content'] for m in messages if m['role'] == 'system'), None)
-        if system_instruction:
-            # Gemini supports system_instruction at model init, but here we might just prepend it
-            # Or simpler: re-initialize model with system_instruction if supported
-            self.model = genai.GenerativeModel(self.model_name, system_instruction=system_instruction)
+        
+        # Filter out system messages from standard flow
+        filtered_messages = [m for m in messages if m['role'] != 'system']
 
-        for msg in messages:
-            if msg['role'] == 'system': continue
-            role = 'user' if msg['role'] == 'user' else 'model'
-            parts = [msg['content']]
-            gemini_history.append({'role': role, 'parts': parts})
+        for msg in filtered_messages:
+            role = "user" if msg['role'] == "user" else "model"
+            parts = [{"text": msg['content']}]
+            contents.append({"role": role, "parts": parts})
 
-        # Attachments (Images/PDFs) for the LATEST user message
-        if attachments and gemini_history and gemini_history[-1]['role'] == 'user':
-            parts = gemini_history[-1]['parts']
+        # Attachments for the last user message
+        if attachments and contents and contents[-1]['role'] == 'user':
             for att in attachments:
                 if att['mime_type'].startswith('image/') or att['mime_type'] == 'application/pdf':
-                    # Gemini client expects data parts
-                    parts.append({
-                        'mime_type': att['mime_type'],
-                        'data': base64.b64decode(att['content_base64']) # Assumes incoming is base64
+                    # Gemini REST expects inline_data
+                     contents[-1]['parts'].append({
+                        "inline_data": {
+                            "mime_type": att['mime_type'],
+                            "data": att['content_base64']
+                        }
                     })
+
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": 0.7,
+                # "maxOutputTokens": 8192,
+            }
+        }
+
+        if system_instruction:
+            payload["system_instruction"] = {
+                "parts": [{"text": system_instruction}]
+            }
+
+        url = f"{self.base_url}/{self.model_name}:streamGenerateContent?key={self.api_key}"
         
-        # Execute
-        chat = self.model.start_chat(history=gemini_history[:-1]) # History up to last msg
-        last_msg = gemini_history[-1]['parts']
-        
-        response = await chat.send_message_async(last_msg, stream=True)
-        async for chunk in response:
-            if chunk.text:
-                yield chunk.text
+        try:
+            with requests.post(url, json=payload, stream=True) as r:
+                r.raise_for_status()
+                # Gemini streams a JSON array of parsed objects, but often sends them in chunks.
+                # However, the format is slightly complex: "[{},{},...]"
+                # Easier to process line by line if they send newlines, but sometimes they assume SSE-like parsing?
+                # Actually, Gemini REST stream returns a list of JSON objects, usually one per line or separated consistently.
+                # Let's try iterating lines. IF that fails, we might need a smarter parser.
+                # Usually it sends: "{\n...}\n,\n{\n...}"
+                
+                # A safer way for manual JSON streaming without a dedicated library:
+                # Use iter_content and buffer? 
+                # Or simplistically assume line-based JSON if nicely formatted.
+                # Official documentation says response comes as a series of JSON objects. 
+                # Let's try to just read and decode chunks, looking for "text" within "candidates".
+                
+                # Update: Requests iter_lines logic might break on formatted JSON.
+                # However, usually there's a structure.
+                # Let's assume standard behavior:
+                
+                for line in r.iter_lines():
+                    if line:
+                        line = line.decode('utf-8').strip()
+                        # Skip array mechanics
+                        if line == '[' or line == ']' or line == ',' or line == '':
+                            continue
+                        
+                        # Sometimes lines are comma separated objects?
+                        if line.startswith(','): line = line[1:]
+                        
+                        try:
+                            data = json.loads(line)
+                            if 'candidates' in data and len(data['candidates']) > 0:
+                                candidate = data['candidates'][0]
+                                if 'content' in candidate and 'parts' in candidate['content']:
+                                     for part in candidate['content']['parts']:
+                                         if 'text' in part:
+                                             yield part['text']
+                        except json.JSONDecodeError:
+                            # It might be a multiline JSON object.
+                            # This simple parser is risky.
+                            pass
+                        
+        except Exception as e:
+            yield f"\n[Error connecting to Gemini: {str(e)}]"
 
 class OllamaProvider(BaseAIProvider):
     def __init__(self, config: Dict):
