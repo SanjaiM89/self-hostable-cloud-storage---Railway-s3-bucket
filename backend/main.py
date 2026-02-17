@@ -44,8 +44,8 @@ def ensure_schema_updates():
         try:
             # PostgreSQL specific JSONB or JSON
             conn.execute(text("ALTER TABLE users ADD COLUMN ai_config JSON DEFAULT '{}'"))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Migration Error (ai_config): {e}")
 
 
 def ensure_default_admin_user():
