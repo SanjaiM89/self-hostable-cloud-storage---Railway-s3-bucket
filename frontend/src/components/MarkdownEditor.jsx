@@ -186,14 +186,14 @@ export default function MarkdownEditor({ file, onClose }) {
                 heading: { levels: [1, 2, 3, 4, 5, 6] },
                 codeBlock: false, // replaced by CodeBlockLowlight
                 strike: true,
+                link: {
+                    openOnClick: false,
+                    autolink: true,
+                    HTMLAttributes: { class: 'editor-link' },
+                },
             }),
             CodeBlockLowlight.configure({ lowlight }),
-            Link.configure({
-                openOnClick: false,
-                autolink: true,
-                HTMLAttributes: { class: 'editor-link' },
-            }),
-            Underline,
+            // Link and Underline are included in StarterKit
             Highlight.configure({ multicolor: true }),
             Subscript,
             Superscript,
