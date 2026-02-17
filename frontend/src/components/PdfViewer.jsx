@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import Loader from './Loader';
 import { useMobile, MobilePdfToolbar } from '../mobile';
+import { useAI } from '../context/AIContext';
 
 // ─── PDF.js Worker ───
 // import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -100,6 +101,17 @@ export default function PdfViewer({ file, fileUrl, onClose, hideDownload = false
         container.addEventListener('scroll', handleScroll, { passive: true });
         return () => container.removeEventListener('scroll', handleScroll);
     }, [numPages]);
+
+    // ─── AI Context Registration ───
+    const { registerContext } = useAI();
+    useEffect(() => {
+        const unregister = registerContext(() => ({
+            name: file.name,
+            type: 'application/pdf',
+            content: `[User is currently viewing PDF: ${file.name} (Page ${currentPage} of ${numPages})]`
+        }));
+        return unregister;
+    }, [registerContext, file.name, currentPage, numPages]);
 
     // ─── Navigation ───
     const scrollToPage = useCallback((p) => {

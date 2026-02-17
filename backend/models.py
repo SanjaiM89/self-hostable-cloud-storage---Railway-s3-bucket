@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, BigInteger
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, BigInteger, JSON
 from sqlalchemy.orm import relationship
 try:
     from .database import Base
@@ -16,6 +16,7 @@ class User(Base):
     is_admin = Column(Boolean, default=False)
     storage_limit = Column(BigInteger, default=2 * 1024 * 1024 * 1024)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    ai_config = Column(JSON, default={})
 
     files = relationship("File", back_populates="owner")
 

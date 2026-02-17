@@ -1,8 +1,9 @@
 import { useRef, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
+import { useAI } from '../context/AIContext';
 import {
     Search, Grid3x3, List, Upload, FolderUp, Sun, Moon, ChevronRight,
-    Home, Activity, ArrowLeft
+    Home, Activity, ArrowLeft, Sparkles
 } from 'lucide-react';
 
 export default function Navbar({
@@ -20,6 +21,7 @@ export default function Navbar({
     onOpenSearch,
 }) {
     const { isDark, toggleTheme } = useTheme();
+    const { toggleAI, isOpen: isAIOpen } = useAI();
     const fileInputRef = useRef(null);
     const folderInputRef = useRef(null);
 
@@ -136,23 +138,36 @@ export default function Navbar({
                 </>
             )}
 
-            {/* Activity toggle */}
-            <button
-                onClick={onToggleActivity}
-                className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
-                title="Activity"
-            >
-                <Activity className="w-4 h-4 app-icon-solid" />
-            </button>
+            {/* Actions */}
+            <div className="flex items-center gap-1 md:gap-2 ml-2">
+                <button
+                    onClick={toggleAI}
+                    className={`p-1.5 rounded-lg transition-all ${isAIOpen
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                        : 'text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)]'
+                        }`}
+                    title="Toggle AI Assistant"
+                >
+                    <Sparkles className="w-4 h-4 md:w-5 md:h-5" />
+                </button>
 
-            {/* Theme toggle */}
-            <button
-                onClick={toggleTheme}
-                className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
-            >
-                {isDark ? <Sun className="w-4 h-4 app-icon-solid" /> : <Moon className="w-4 h-4 app-icon-solid" />}
-            </button>
+                {/* Activity toggle */}
+                <button
+                    onClick={onToggleActivity}
+                    className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                    title="Activity"
+                >
+                    <Activity className="w-4 h-4 app-icon-solid" />
+                </button>
 
+                {/* Theme toggle */}
+                <button
+                    onClick={toggleTheme}
+                    className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-secondary)] transition-colors"
+                >
+                    {isDark ? <Sun className="w-4 h-4 app-icon-solid" /> : <Moon className="w-4 h-4 app-icon-solid" />}
+                </button>
+            </div>
         </header>
     );
 }

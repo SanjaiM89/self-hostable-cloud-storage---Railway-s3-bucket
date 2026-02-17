@@ -21,6 +21,7 @@ import { Markdown } from 'tiptap-markdown';
 import { filesAPI } from '../utils/api';
 import Loader from './Loader';
 import { useMobile, MobileMdToolbar } from '../mobile';
+import { useAI } from '../context/AIContext';
 import {
     ArrowLeft, Save, Upload as UploadIcon,
     Bold, Italic, Heading1, Heading2, Heading3,
@@ -251,8 +252,24 @@ export default function MarkdownEditor({ file, onClose }) {
         },
     });
 
-    // ─── 6. Sync editorRef ───
-    useEffect(() => { editorRef.current = editor; }, [editor]);
+    // ... (inside component)
+
+    // ─── 6. Sync editorRef & Register AI Context ───
+    const { registerContext } = useAI();
+
+    useEffect(() => {
+        editorRef.current = editor;
+    }, [editor]);
+
+    useEffect(() => {
+        if (!editor) return;
+        const unregister = registerContext(() => ({
+            name: file.name,
+            type: 'text/markdown',
+            content: editor.storage.markdown.getMarkdown()
+        }));
+        return unregister;
+    }, [editor, registerContext, file.name]);
 
     // ─── Ctrl+S save ───
     useEffect(() => {
