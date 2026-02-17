@@ -1,11 +1,14 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Upload, Download, Archive, CheckCircle2, AlertCircle } from 'lucide-react';
+import { X, Upload, Download, Archive, CheckCircle2, AlertCircle, Copy, ArrowRight, FolderPlus } from 'lucide-react';
 import Loader from './Loader';
 
 const iconMap = {
     upload: Upload,
     download: Download,
     extract: Archive,
+    copy: Copy,
+    move: ArrowRight,
+    group: FolderPlus,
 };
 
 const statusColors = {
