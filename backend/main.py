@@ -110,7 +110,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
-        "https://lazycloudio.vercel.app"
+        "https://lazycloudio.vercel.app",
+        "https://self-hostable-cloud-storage-railway-flax.vercel.app",
+        "https://self-hostable-cloud-storage-railway.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
