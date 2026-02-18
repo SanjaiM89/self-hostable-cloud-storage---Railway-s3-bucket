@@ -180,7 +180,7 @@ export default function MusicLayout() {
     };
 
     return (
-        <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans selection:bg-pink-500 selection:text-white transition-colors duration-200">
+        <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans selection:bg-green-500 selection:text-white transition-colors duration-200">
 
             {/* Left Rail (Icon Rail) */}
             <div className="h-full flex-shrink-0 z-30">
