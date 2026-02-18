@@ -1,0 +1,70 @@
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Boolean, BigInteger
+from sqlalchemy.orm import relationship
+import datetime
+
+try:
+    from backend.database import Base
+except ImportError:
+    from database import Base
+
+class MusicMetadata(Base):
+    __tablename__ = "music_metadata"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    file_id = Column(Integer, ForeignKey("files.id"), unique=True)
+    title = Column(String, index=True)
+    artist = Column(String, index=True)
+    album = Column(String, index=True)
+    genre = Column(String)
+    duration = Column(Integer)  # Seconds
+    track_number = Column(Integer)
+    cover_art = Column(String, nullable=True)  # S3 Key or URL
+    
+    file = relationship("File", back_populates="music_metadata")
+
+class Playlist(Base):
+    __tablename__ = "playlists"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(String)
+    description = Column(String, nullable=True)
+    cover_image = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # New fields for Recommendations
+    is_generated = Column(Boolean, default=False)
+    last_updated = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    owner = relationship("User", back_populates="playlists")
+    songs = relationship("PlaylistSong", back_populates="playlist", cascade="all, delete-orphan")
+
+class PlaylistSong(Base):
+    __tablename__ = "playlist_songs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    playlist_id = Column(Integer, ForeignKey("playlists.id"))
+    file_id = Column(Integer, ForeignKey("files.id"))
+    order = Column(Integer)
+    
+    file = relationship("File")
+    playlist = relationship("Playlist", back_populates="songs")
+
+class ListenHistory(Base):
+    __tablename__ = "listen_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    file_id = Column(Integer, ForeignKey("files.id"))
+    played_at = Column(DateTime, default=datetime.datetime.utcnow)
+    duration_played = Column(Integer, default=0) # Seconds played
+    
+    user = relationship("User")
+    file = relationship("File")
+
+# Update Playlist to include generation fields (Monkey-patching if needed, but better to edit class directly if possible. 
+# Since I am replacing the file content, I will rewrite the Playlist class below if I can or just append ListenHistory and rely on the user to accept the Plan update which said "Update Playlist model". 
+# Actually, I must update the Playlist class definition in the same file. 
+# I will start the replacement from the Playlist class definition to ensure I catch it.)
+
+

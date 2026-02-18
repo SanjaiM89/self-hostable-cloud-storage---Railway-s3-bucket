@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Home, Trash2, Settings, Plus, Search, HardDrive, Shield, PanelLeftClose, PanelLeftOpen, Upload, FileText, Sheet, MonitorPlay, Code, GripVertical } from 'lucide-react';
+import IconRail from './IconRail';
+import { Home, Trash2, Settings, Plus, Search, HardDrive, Shield, PanelLeftClose, PanelLeftOpen, Upload, FileText, Sheet, MonitorPlay, Code, GripVertical, Music } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { filesAPI } from '../utils/api';
 import { Tree } from './ui/file-tree';
@@ -123,30 +124,16 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
     return (
         <aside className="h-screen flex bg-[var(--sidebar-bg)] border-r border-[var(--sidebar-border)] flex-shrink-0 relative" style={{ width: `${sidebarWidth}px` }}>
             {/* Eden-like activity rail */}
-            <div className="relative w-[56px] border-r border-[var(--sidebar-border)] bg-[var(--sidebar-icon-rail)] flex flex-col items-center py-3 gap-2">
-                <button className="w-9 h-9 rounded-full bg-[var(--sidebar-accent)] text-white flex items-center justify-center shadow-sm" title="New" onClick={() => setQuickOpen((v) => !v)}>
-                    <Plus className="w-5 h-5 app-icon-solid" strokeWidth={2.35} />
-                </button>
-                <button className="icon-rail-btn" onClick={() => onNavigate(null, 'Home')}><Home className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
-                <div className="mt-auto" />
-                <button className="icon-rail-btn" onClick={onToggleCollapse}><PanelLeftClose className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
-                <button className="icon-rail-btn" onClick={() => navigate('/settings')}><Settings className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
-                <div className="w-9 h-9 rounded-full bg-[var(--sidebar-active)] text-[var(--sidebar-text-active)] text-sm font-semibold flex items-center justify-center">
-                    {user?.username?.[0]?.toUpperCase() || 'S'}
-                </div>
-
-                {quickOpen && (
-                    <div className="absolute left-[62px] top-3 z-40 w-56 rounded-xl border border-[var(--border-color)] bg-[var(--card-bg)] shadow-xl p-1.5">
-                        <input ref={quickUploadRef} type="file" multiple className="hidden" onChange={handleQuickUpload} />
-                        <button onClick={() => quickUploadRef.current?.click()} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Upload className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Upload</button>
-                        <button onClick={() => quickCreate('writer', 'Untitled Document')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><FileText className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Writer</button>
-                        <button onClick={() => quickCreate('spreadsheet', 'Untitled Spreadsheet')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Sheet className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Spreadsheet</button>
-                        <button onClick={() => quickCreate('presentation', 'Untitled Presentation')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><MonitorPlay className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New PPT</button>
-                        <button onClick={openNewFolderModal} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Plus className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Folder</button>
-                        <button onClick={() => quickCreate('markdown', 'Untitled')} className="w-full text-left px-2.5 py-2 rounded-lg hover:bg-[var(--bg-secondary)] text-sm flex items-center gap-2"><Code className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />New Markdown</button>
-                    </div>
-                )}
-            </div>
+            <IconRail
+                onNavigate={onNavigate}
+                onToggleCollapse={onToggleCollapse}
+                collapsed={false} // Sidebar is not collapsed here (this is the expanded view logic)
+                onOpenTrash={onOpenTrash}
+                onOpenSearch={onOpenSearch}
+                onCreateFolder={onCreateFolder}
+                onCreateDocument={onCreateDocument}
+                onUpload={onUpload}
+            />
 
             {/* Main nav panel */}
             <div className="flex-1 flex flex-col min-w-0">
@@ -186,6 +173,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 </div>
 
                 <div className="px-3 py-2 border-t border-[var(--sidebar-border)]">
+                    <button onClick={() => navigate('/music')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Music className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Music</button>
                     <button onClick={onOpenTrash} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Trash2 className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Trash</button>
                     {user?.is_admin && (
                         <button onClick={() => navigate('/admin')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Shield className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Admin</button>

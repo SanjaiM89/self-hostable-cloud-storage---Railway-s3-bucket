@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -17,13 +17,15 @@ import os
 
 try:
     from .database import engine, Base, SessionLocal
-    from .routers import auth, files, sharing, admin, ai
+    from .routers import auth, files, sharing, admin, ai, plans, payments
+    from .music import router as music
     from .models import User
     from .auth.utils import get_password_hash
     from .ws_manager import manager
 except ImportError:
     from database import engine, Base, SessionLocal
-    from routers import auth, files, sharing, admin, ai
+    from routers import auth, files, sharing, admin, ai, plans, payments
+    from music import router as music
     from models import User
     from auth.utils import get_password_hash
     from ws_manager import manager
@@ -54,6 +56,14 @@ def ensure_schema_updates():
         try:
             # PostgreSQL specific JSONB or JSON
             conn.execute(text("ALTER TABLE users ADD COLUMN ai_config JSON DEFAULT '{}'"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE playlists ADD COLUMN is_generated BOOLEAN DEFAULT FALSE"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE playlists ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
         except Exception:
             pass
 
@@ -87,10 +97,7 @@ try:
     ensure_schema_updates()
     ensure_default_admin_user()
 
-    inspector = inspect(engine)
-    if "files" in inspector.get_table_names():
-        columns = [c["name"] for c in inspector.get_columns("files")]
-        print(f"DEBUG: 'files' table columns in this DB: {columns}")
+
 except Exception as e:
     print(f"Database setup error: {e}")
     pass
@@ -102,8 +109,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://lazycloudio.vercel.app",
-        "*"
+        "http://localhost:5174",
+        "https://lazycloudio.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -116,11 +123,19 @@ def read_root():
     return {"message": "Welcome to Cloud Storage API"}
 
 
-app.include_router(auth.router)
-app.include_router(files.router)
-app.include_router(sharing.router)
-app.include_router(ai.router)
-app.include_router(admin.router)
+# Create a main API router
+api_router = APIRouter(prefix="/api")
+
+api_router.include_router(auth.router)
+api_router.include_router(files.router)
+api_router.include_router(sharing.router)
+api_router.include_router(ai.router)
+api_router.include_router(admin.router)
+api_router.include_router(plans.router, prefix="/plans", tags=["plans"])
+api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
+api_router.include_router(music.router)
+
+app.include_router(api_router)
 
 # Only register WebSocket endpoint when NOT on Vercel (Vercel doesn't support WS)
 IS_VERCEL = bool(os.environ.get("VERCEL"))

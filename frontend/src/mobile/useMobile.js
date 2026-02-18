@@ -1,18 +1,27 @@
 import { useState, useEffect } from 'react';
 
-const MOBILE_BREAKPOINT = 768;
+/**
+ * Detects actual mobile devices (phones/tablets) — NOT just small desktop windows.
+ * Uses user-agent regex + touch capability as signals.
+ */
+function detectMobileDevice() {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') return false;
+
+    const ua = navigator.userAgent || '';
+    const mobileUA = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile|Tablet/i.test(ua);
+
+    // iPads on Safari report as "Macintosh" but have touch
+    const isIPad = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+
+    return mobileUA || isIPad;
+}
 
 export default function useMobile() {
-    const [isMobile, setIsMobile] = useState(() =>
-        typeof window !== 'undefined' ? window.innerWidth < MOBILE_BREAKPOINT : false
-    );
+    const [isMobile, setIsMobile] = useState(() => detectMobileDevice());
 
+    // Keep useEffect to maintain consistent hook count across renders
     useEffect(() => {
-        const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT - 1}px)`);
-        const handler = (e) => setIsMobile(e.matches);
-        mql.addEventListener('change', handler);
-        setIsMobile(mql.matches);
-        return () => mql.removeEventListener('change', handler);
+        setIsMobile(detectMobileDevice());
     }, []);
 
     return isMobile;

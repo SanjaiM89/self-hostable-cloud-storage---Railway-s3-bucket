@@ -16,4 +16,12 @@ openpyxl
 python-pptx
 PyJWT
 pypdf
+ffmpeg-python
+yt-dlp
+mutagen
+shazamio
+httpx
+numpy
+faiss-cpu
+razorpay
 
