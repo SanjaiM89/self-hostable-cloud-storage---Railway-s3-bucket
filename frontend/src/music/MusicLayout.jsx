@@ -97,7 +97,12 @@ export default function MusicLayout() {
                     // Extract file ID from URL if possible, or just append ?redirect=false
                     // currentSong.url is like "/api/files/{id}/stream"
 
-                    const res = await api.get(streamEndpoint, { params: { redirect: false } });
+                    let requestUrl = streamEndpoint;
+                    if (requestUrl.startsWith('/api')) {
+                        requestUrl = requestUrl.substring(4);
+                    }
+
+                    const res = await api.get(requestUrl, { params: { redirect: false } });
                     const directUrl = res.data.url;
 
                     audioRef.current.src = directUrl;

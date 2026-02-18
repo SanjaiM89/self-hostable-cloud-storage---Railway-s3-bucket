@@ -476,12 +476,26 @@ def get_file_content(
 
 @router.get("/{file_id}/stream")
 def stream_file(
-    file_id: int,
+    file_id: str,
     request: Request,
     redirect: bool = True,
     db: Session = Depends(get_db),
 ):
-    """Stream file content (support for audio/video)."""
+    """Stream file content (support for audio/video). Accepts int ID or encrypted string ID."""
+    
+    # Try to decrypt if it looks like an encrypted string
+    actual_file_id = None
+    if file_id.isdigit():
+        actual_file_id = int(file_id)
+    else:
+        try:
+            actual_file_id = decrypt_id(file_id)
+        except:
+             pass
+    
+    if actual_file_id is None:
+         raise HTTPException(status_code=404, detail="File not found (Invalid ID)")
+
     # Auth Check: Try cookie or query param
     # Note: proper Auth dependency is hard for <audio> src without cookies.
     # We assume 'access_token' cookie is set, or we allow a query param 'token'.
@@ -521,7 +535,7 @@ def stream_file(
             raise HTTPException(status_code=401, detail="Invalid token")
 
     file = db.query(FileModel).filter(
-        FileModel.id == file_id,
+        FileModel.id == actual_file_id,
         FileModel.user_id == user.id,
     ).first()
     
@@ -665,7 +679,14 @@ def download_file(
     
     # Construct absolute URL to the stream endpoint
     # base_url usually ends with /
-    proxy_url = f"{str(request.base_url).rstrip('/')}/files/stream/{token}"
+    # Route is /api/files/{id}/stream
+    proxy_url = f"{str(request.base_url).rstrip('/')}/api/files/{token}/stream"
+    
+    # Append auth token if available (for PDF viewer which might not send headers)
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        access_token = auth_header.split(" ")[1]
+        proxy_url += f"?token={access_token}"
     
     return {
         "url": proxy_url,
