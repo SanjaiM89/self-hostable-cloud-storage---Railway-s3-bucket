@@ -17,8 +17,42 @@ class User(Base):
     storage_limit = Column(BigInteger, default=2 * 1024 * 1024 * 1024)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     ai_config = Column(JSON, default={})
-
+    
+    plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
+    subscription_expiry = Column(DateTime, nullable=True)
+    
     files = relationship("File", back_populates="owner")
+    plan = relationship("Plan")
+    payments = relationship("Payment", back_populates="user")
+    playlists = relationship("Playlist", back_populates="owner")
+
+class Plan(Base):
+    __tablename__ = "plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True)
+    description = Column(String, nullable=True)
+    price = Column(Integer, default=0) # In smallest currency unit (e.g., paise for INR)
+    currency = Column(String, default="INR")
+    storage_limit = Column(BigInteger, default=2 * 1024 * 1024 * 1024) # Default 2GB
+    max_file_size = Column(BigInteger, default=2 * 1024 * 1024 * 1024) # Default 2GB
+    duration_days = Column(Integer, default=30)
+    is_active = Column(Boolean, default=True)
+
+class Payment(Base):
+    __tablename__ = "payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    plan_id = Column(Integer, ForeignKey("plans.id"))
+    razorpay_order_id = Column(String, index=True)
+    razorpay_payment_id = Column(String, nullable=True)
+    amount = Column(Integer)
+    status = Column(String, default="created") # created, paid, failed
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    user = relationship("User", back_populates="payments")
+    plan = relationship("Plan")
 
 class File(Base):
     __tablename__ = "files"
@@ -40,6 +74,7 @@ class File(Base):
     
     owner = relationship("User", back_populates="files")
     children = relationship("File", backref="parent", remote_side=[id], foreign_keys=[parent_id])
+    music_metadata = relationship("MusicMetadata", back_populates="file", uselist=False, cascade="all, delete-orphan")
 
 
 class FileShare(Base):

@@ -144,6 +144,8 @@ class OllamaProvider(BaseAIProvider):
                             yield body['message']['content']
                         if body.get('done'):
                             break
+        except requests.exceptions.ConnectionError:
+            yield f"\n[Error: Could not connect to Ollama at {self.base_url}. Please ensure Ollama is running.]"
         except Exception as e:
             yield f"\n[Error connecting to Ollama: {str(e)}]"
 
@@ -208,6 +210,8 @@ class LMStudioProvider(BaseAIProvider):
                                         yield delta['content']
                             except json.JSONDecodeError:
                                 pass
+        except requests.exceptions.ConnectionError:
+            yield f"\n[Error: Could not connect to LM Studio at {self.base_url}. Please ensure the LM Studio server is running and listening on this URL.]"
         except Exception as e:
              yield f"\n[Error connecting to LM Studio: {str(e)}]"
 

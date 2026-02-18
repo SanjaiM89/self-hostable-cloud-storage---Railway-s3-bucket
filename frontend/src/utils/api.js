@@ -2,24 +2,8 @@ import axios from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-const RETRYABLE_PREFIXES = ['/auth/', '/files/', '/shares/', '/admin/'];
-
-function shouldRetryWithApiPrefix(url = '') {
-    return RETRYABLE_PREFIXES.some((prefix) => url.startsWith(prefix));
-}
-
-function swapApiPrefix(url = '') {
-    if (url.startsWith('/api/')) {
-        return url.replace('/api/', '/');
-    }
-    if (url.startsWith('/')) {
-        return `/api${url}`;
-    }
-    return url;
-}
-
 const api = axios.create({
-    baseURL: API_URL,
+    baseURL: `${API_URL}/api`,
 });
 
 // Attach token to every request
@@ -35,20 +19,6 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     (response) => response,
     async (error) => {
-        const requestConfig = error?.config;
-        const requestUrl = requestConfig?.url || '';
-
-        if (
-            error?.response?.status === 404 &&
-            requestConfig &&
-            !requestConfig.__apiPrefixRetried &&
-            shouldRetryWithApiPrefix(requestUrl)
-        ) {
-            requestConfig.__apiPrefixRetried = true;
-            requestConfig.url = swapApiPrefix(requestUrl);
-            return api(requestConfig);
-        }
-
         if (error.response && error.response.status === 401) {
             localStorage.removeItem('token');
             window.location.href = '/login';
@@ -162,6 +132,7 @@ export default api;
 export const adminAPI = {
     users: () => api.get('/admin/users'),
     updateUserStorage: (userId, storageLimit) => api.patch(`/admin/users/${userId}/storage`, { storage_limit: storageLimit }),
+    assignPlan: (userId, planId) => api.post(`/admin/users/${userId}/assign-plan`, { plan_id: planId }),
     updateAdminProfile: (payload) => api.patch('/admin/settings/profile', payload),
     updateAdminPassword: (payload) => api.patch('/admin/settings/password', payload),
 };
@@ -172,4 +143,17 @@ export const aiAPI = {
     chat: (payload) => api.post('/ai/chat', payload, {
         responseType: 'stream',
     }),
+};
+
+export const plansAPI = {
+    getAll: () => api.get('/plans'),
+    getAllAdmin: () => api.get('/plans/all'),
+    create: (data) => api.post('/plans', data),
+    update: (id, data) => api.put(`/plans/${id}`, data),
+    delete: (id) => api.delete(`/plans/${id}`),
+};
+
+export const paymentsAPI = {
+    createOrder: (planId) => api.post('/payments/create-order', { plan_id: planId }),
+    verify: (data) => api.post('/payments/verify', data),
 };

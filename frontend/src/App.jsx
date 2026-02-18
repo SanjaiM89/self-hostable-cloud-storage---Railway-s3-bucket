@@ -12,6 +12,12 @@ const EditorPage = lazy(() => import('./pages/EditorPage'));
 const SharedFilePage = lazy(() => import('./pages/SharedFilePage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const MusicLayout = lazy(() => import('./music/MusicLayout'));
+const MusicLibrary = lazy(() => import('./music/MusicLibrary'));
+const YouTube = lazy(() => import('./music/YouTube'));
+const Discovery = lazy(() => import('./music/Discovery'));
+const Playlists = lazy(() => import('./music/Playlists'));
+const MusicSettings = lazy(() => import('./music/MusicSettings'));
 
 function LoadingFallback() {
   return (
@@ -102,6 +108,21 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="/music"
+            element={
+              <ProtectedRoute>
+                <MusicLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<MusicLibrary />} />
+            <Route path="discovery" element={<Discovery />} />
+            <Route path="playlists" element={<Playlists />} />
+            <Route path="youtube" element={<YouTube />} />
+            <Route path="settings" element={<MusicSettings />} />
+          </Route>
           <Route
             path="/editor/:fileId"
             element={

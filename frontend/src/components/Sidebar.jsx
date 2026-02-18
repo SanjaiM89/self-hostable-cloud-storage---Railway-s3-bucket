@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Home, Trash2, Settings, Plus, Search, HardDrive, Shield, PanelLeftClose, PanelLeftOpen, Upload, FileText, Sheet, MonitorPlay, Code, GripVertical } from 'lucide-react';
+import { Home, Trash2, Settings, Plus, Search, HardDrive, Shield, PanelLeftClose, PanelLeftOpen, Upload, FileText, Sheet, MonitorPlay, Code, GripVertical, Music } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { filesAPI } from '../utils/api';
 import { Tree } from './ui/file-tree';
@@ -128,6 +128,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                     <Plus className="w-5 h-5 app-icon-solid" strokeWidth={2.35} />
                 </button>
                 <button className="icon-rail-btn" onClick={() => onNavigate(null, 'Home')}><Home className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
+                <button className="icon-rail-btn" onClick={() => navigate('/music')} title="Music Player"><Music className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
                 <div className="mt-auto" />
                 <button className="icon-rail-btn" onClick={onToggleCollapse}><PanelLeftClose className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
                 <button className="icon-rail-btn" onClick={() => navigate('/settings')}><Settings className="w-4 h-4 app-icon-solid" strokeWidth={2.35} /></button>
@@ -186,6 +187,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 </div>
 
                 <div className="px-3 py-2 border-t border-[var(--sidebar-border)]">
+                    <button onClick={() => navigate('/music')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Music className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Music</button>
                     <button onClick={onOpenTrash} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Trash2 className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Trash</button>
                     {user?.is_admin && (
                         <button onClick={() => navigate('/admin')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Shield className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Admin</button>

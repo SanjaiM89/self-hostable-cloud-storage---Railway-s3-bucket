@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Body, Request
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Body, Request, BackgroundTasks
 try:
     from ..utils.encryption import encrypt_id, decrypt_id
 except ImportError:
     from utils.encryption import encrypt_id, decrypt_id
 from sqlalchemy.orm import Session
+from sqlalchemy import func, or_, and_
 from typing import List, Optional
 try:
     from ..database import get_db
@@ -300,6 +301,7 @@ def search_files(
 async def upload_file(
     file: UploadFile = File(...),
     parent_id: Optional[int] = Form(default=None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -332,6 +334,17 @@ async def upload_file(
     
     # Broadcast update
     await manager.broadcast({"type": "refresh", "folder_id": parent_id})
+
+    # Trigger Music/Video Analysis
+    try:
+        try:
+            from backend.music.extraction import handle_video_upload
+        except ImportError:
+            from music.extraction import handle_video_upload
+            
+        background_tasks.add_task(handle_video_upload, new_file.id, db) 
+    except Exception as e:
+        print(f"Extraction trigger failed: {e}")
 
     return {
         "id": new_file.id,
@@ -394,6 +407,21 @@ async def register_uploaded_file(
     current_user: User = Depends(get_current_user),
 ):
     """Register a file in the DB after it was uploaded directly to S3."""
+    
+    # Enforce Storage Limits
+    if current_user.storage_limit and data.size > current_user.storage_limit:
+         raise HTTPException(status_code=400, detail="File too large for your storage limit")
+
+    # Calculate current usage
+    total_used = db.query(func.sum(FileModel.size)).filter(
+        FileModel.user_id == current_user.id,
+        FileModel.is_trashed == False
+    ).scalar() or 0
+    
+    if total_used + data.size > current_user.storage_limit:
+        gb_limit = current_user.storage_limit / (1024 * 1024 * 1024)
+        raise HTTPException(status_code=400, detail=f"Storage limit exceeded ({gb_limit:.2f} GB). Please upgrade your plan.")
+
     new_file = FileModel(
         name=data.filename,
         s3_key=data.s3_key,
@@ -444,6 +472,74 @@ def get_file_content(
         return {"content": content, "name": file.name, "id": file.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read file: {str(e)}")
+
+
+@router.get("/{file_id}/stream")
+def stream_file(
+    file_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Stream file content (support for audio/video)."""
+    # Auth Check: Try cookie or query param
+    # Note: proper Auth dependency is hard for <audio> src without cookies.
+    # We assume 'access_token' cookie is set, or we allow a query param 'token'.
+    
+    auth_header = request.headers.get("Authorization")
+    token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    elif request.query_params.get("token"):
+        token = request.query_params.get("token")
+    elif request.cookies.get("access_token"):
+         token = request.cookies.get("access_token")
+         # Remove 'Bearer ' prefix if present
+         if token.startswith("Bearer "): token = token.split(" ")[1]
+    
+    if not token:
+        # Fallback: Check if file is shared publicly? For now, strict.
+        raise HTTPException(status_code=401, detail="Not authenticated")
+        
+    # Verify Token (Manual decode to avoid Dependency issues in stream)
+    try:
+        from ..auth.utils import decode_access_token
+        payload = decode_access_token(token)
+        username = payload.get("sub")
+        user = db.query(User).filter(User.username == username).first()
+        if not user: raise Exception()
+    except:
+         # Check import path if relative fails
+        try:
+            from auth.utils import decode_access_token
+            payload = decode_access_token(token)
+            username = payload.get("sub")
+            user = db.query(User).filter(User.username == username).first()
+        except:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+    file = db.query(FileModel).filter(
+        FileModel.id == file_id,
+        FileModel.user_id == user.id,
+    ).first()
+    
+    if not file:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Generate Presigned URL and Redirect? 
+    # Redirecting to S3 presigned URL is MUCH better for streaming/seeking support
+    # than proxying through FastAPI.
+    
+    try:
+        url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': BUCKET_NAME, 'Key': file.s3_key},
+            ExpiresIn=3600
+        )
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=url)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate stream URL: {e}")
+
 
 
 class ContentSave(BaseModel):

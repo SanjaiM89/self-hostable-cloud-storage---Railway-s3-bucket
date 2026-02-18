@@ -4,14 +4,16 @@ from sqlalchemy.orm import Session
 
 try:
     from ..database import get_db
-    from ..models import User, File as FileModel
+    from ..models import User, Plan, File as FileModel
     from .files import get_current_user
     from ..auth.utils import verify_password, get_password_hash
 except ImportError:
     from database import get_db
-    from models import User, File as FileModel
+    from models import User, Plan, File as FileModel
     from routers.files import get_current_user
     from auth.utils import verify_password, get_password_hash
+
+import datetime
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -137,3 +139,32 @@ def update_admin_password(
     db.commit()
 
     return {'message': 'Password updated successfully'}
+
+
+class PlanAssignment(BaseModel):
+    plan_id: int
+
+
+@router.post("/users/{user_id}/assign-plan")
+def assign_plan_to_user(
+    user_id: int,
+    data: PlanAssignment,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    plan = db.query(Plan).filter(Plan.id == data.plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.plan_id = plan.id
+    user.storage_limit = plan.storage_limit
+    # user.max_file_size = plan.max_file_size 
+    user.subscription_expiry = datetime.datetime.utcnow() + datetime.timedelta(days=plan.duration_days)
+    
+    db.commit()
+    return {"message": f"Plan {plan.name} assigned to user {user.username}"}
+
