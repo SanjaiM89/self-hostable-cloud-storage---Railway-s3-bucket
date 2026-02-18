@@ -13,6 +13,7 @@ const SharedFilePage = lazy(() => import('./pages/SharedFilePage'));
 const AdminPage = lazy(() => import('./pages/AdminPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const MusicLayout = lazy(() => import('./music/MusicLayout'));
+const MusicHome = lazy(() => import('./music/MusicHome'));
 const MusicLibrary = lazy(() => import('./music/MusicLibrary'));
 const YouTube = lazy(() => import('./music/YouTube'));
 const Discovery = lazy(() => import('./music/Discovery'));
@@ -117,7 +118,8 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<MusicLibrary />} />
+            <Route index element={<MusicHome />} />
+            <Route path="library" element={<MusicLibrary />} />
             <Route path="discovery" element={<Discovery />} />
             <Route path="playlists" element={<Playlists />} />
             <Route path="youtube" element={<YouTube />} />

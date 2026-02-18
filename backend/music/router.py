@@ -17,15 +17,38 @@ except ImportError:
     # Local dev fallback
     from database import get_db
     from models import User, File as FileModel
-    from music.models import MusicMetadata, Playlist, PlaylistSong
+    from music.models import MusicMetadata, Playlist, PlaylistSong, ListenHistory
     from routers.auth import get_current_user
     from music.youtube import tasks, process_download, DownloadTask
     from music.audio_recommender import audio_recommender
+    from music.recommendation_engine import recommendation_engine
     from music.mistral import get_music_recommendations, generate_ai_playlist_name
     from music.sockets import manager
 
 router = APIRouter(prefix="/music", tags=["music"])
 
+# --- Recommendations (Endpoints that must be before dynamic routes) ---
+
+@router.get("/playlists/recommended")
+def get_recommended_playlists(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # For now, just return the Daily Mix if exists
+    daily_mix = db.query(Playlist).filter(
+        Playlist.user_id == current_user.id,
+        Playlist.is_generated == True
+    ).all()
+
+    # If no daily mix, try to generate one locally
+    if not daily_mix:
+        mix = recommendation_engine.generate_daily_mix(db, current_user.id)
+        if mix:
+            daily_mix = [mix]
+
+    return daily_mix
+
+# --- Playlists ---
 # --- Helper ---
 def get_music_folder(db: Session, user: User):
     """Get or create the 'LazyioMusic' folder for the user."""
@@ -144,7 +167,57 @@ def scan_music_library(
     db.commit()
     return {"message": f"Scanned library. Processed {processed} new songs."}
 
-# --- Playlists ---
+# --- Recommendations & AI ---
+
+@router.get("/playlists/recommended")
+def get_recommended_playlists(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # For now, just return the Daily Mix if exists
+    daily_mix = db.query(Playlist).filter(
+        Playlist.user_id == current_user.id, 
+        Playlist.is_generated == True
+    ).all()
+    
+    # If no daily mix, try to generate one locally
+    if not daily_mix:
+        mix = recommendation_engine.generate_daily_mix(db, current_user.id)
+        if mix:
+            daily_mix = [mix]
+            
+    return daily_mix
+
+@router.post("/history")
+def record_history(
+    file_id: int = Body(..., embed=True),
+    duration: int = Body(0, embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    recommendation_engine.record_history(db, current_user.id, file_id, duration)
+    return {"status": "recorded"}
+
+@router.get("/recommendations")
+def get_recommendations(
+    current_song_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # ... existing implementation ...
+    # Wait, I need to read the existing implementation to know what to replace if I move it.
+    # The previous `view_file` showed `get_recommendations` at line 254 (in outline) or later.
+    # I should just MOVE `get_recommended_playlists` to the top.
+    pass 
+
+# I will just insert `get_recommended_playlists` at line 149 and remove it from the bottom.
+# But `replace_file_content` is for single contiguous block.
+# I will use `multi_replace_file_content` or just two `replace_file_content` calls.
+# I will use `replace_file_content` to insert it at line 149.
+# And then another call to remove it from the bottom.
+# Actually, I can just use `multi_replace_file_content`.
+
+
 
 @router.get("/playlists")
 def get_playlists(
@@ -248,6 +321,35 @@ def add_song_to_playlist(
     db.add(item)
     db.commit()
     return {"message": "Song added"}
+
+@router.post("/history")
+def record_history(
+    file_id: int = Body(..., embed=True),
+    duration: int = Body(0, embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    recommendation_engine.record_history(db, current_user.id, file_id, duration)
+    return {"status": "recorded"}
+
+@router.get("/playlists/recommended")
+def get_recommended_playlists(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # For now, just return the Daily Mix if exists
+    daily_mix = db.query(Playlist).filter(
+        Playlist.user_id == current_user.id, 
+        Playlist.is_generated == True
+    ).all()
+    
+    # If no daily mix, try to generate one locally
+    if not daily_mix:
+        mix = recommendation_engine.generate_daily_mix(db, current_user.id)
+        if mix:
+            daily_mix = [mix]
+            
+    return daily_mix
 
 # --- Recommendations & AI ---
 

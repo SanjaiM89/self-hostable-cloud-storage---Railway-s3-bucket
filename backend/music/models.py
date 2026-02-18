@@ -32,6 +32,10 @@ class Playlist(Base):
     cover_image = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     
+    # New fields for Recommendations
+    is_generated = Column(Boolean, default=False)
+    last_updated = Column(DateTime, default=datetime.datetime.utcnow)
+    
     owner = relationship("User", back_populates="playlists")
     songs = relationship("PlaylistSong", back_populates="playlist", cascade="all, delete-orphan")
 
@@ -43,5 +47,24 @@ class PlaylistSong(Base):
     file_id = Column(Integer, ForeignKey("files.id"))
     order = Column(Integer)
     
-    playlist = relationship("Playlist", back_populates="songs")
     file = relationship("File")
+    playlist = relationship("Playlist", back_populates="songs")
+
+class ListenHistory(Base):
+    __tablename__ = "listen_history"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    file_id = Column(Integer, ForeignKey("files.id"))
+    played_at = Column(DateTime, default=datetime.datetime.utcnow)
+    duration_played = Column(Integer, default=0) # Seconds played
+    
+    user = relationship("User")
+    file = relationship("File")
+
+# Update Playlist to include generation fields (Monkey-patching if needed, but better to edit class directly if possible. 
+# Since I am replacing the file content, I will rewrite the Playlist class below if I can or just append ListenHistory and rely on the user to accept the Plan update which said "Update Playlist model". 
+# Actually, I must update the Playlist class definition in the same file. 
+# I will start the replacement from the Playlist class definition to ensure I catch it.)
+
+

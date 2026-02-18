@@ -69,7 +69,7 @@ export default function Player({ currentSong, isPlaying, onTogglePlay, audioRef 
                     <button className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><Shuffle size={16} /></button>
                     <button className="text-[var(--text-primary)] hover:text-[var(--accent)]"><SkipBack size={20} fill="currentColor" /></button>
                     <button
-                        className="w-10 h-10 rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] flex items-center justify-center hover:scale-105 transition"
+                        className="w-10 h-10 rounded-full bg-[var(--text-primary)] text-[var(--bg-primary)] flex items-center justify-center hover:scale-105 transition hover:bg-[var(--accent)] hover:text-white"
                         onClick={onTogglePlay}
                     >
                         {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" className="ml-1" />}
@@ -85,7 +85,7 @@ export default function Player({ currentSong, isPlaying, onTogglePlay, audioRef 
                         min="0"
                         max={duration || 100}
                         value={progress}
-                        className="flex-1 h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--text-primary)]"
+                        className="flex-1 h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
                         onChange={(e) => {
                             const val = Number(e.target.value);
                             if (audioRef.current) audioRef.current.currentTime = val;
@@ -105,7 +105,7 @@ export default function Player({ currentSong, isPlaying, onTogglePlay, audioRef 
                     max="1"
                     step="0.01"
                     value={volume}
-                    className="w-20 h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--text-primary)]"
+                    className="w-20 h-1 bg-[var(--border-color)] rounded-lg appearance-none cursor-pointer accent-[var(--accent)]"
                     onChange={(e) => setVolume(Number(e.target.value))}
                 />
                 <button className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]"><Maximize2 size={18} /></button>

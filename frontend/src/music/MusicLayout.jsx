@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import Sidebar from '../components/Sidebar';
+import MusicSidebar from './MusicSidebar';
+import IconRail from '../components/IconRail';
+import RightPanel from './RightPanel';
 import Player from './Player';
 import SmartSearch from './SmartSearch';
 import { Youtube, Music, Sparkles, Settings as SettingsIcon, Disc } from 'lucide-react';
@@ -93,6 +95,12 @@ export default function MusicLayout() {
                 .then(() => {
                     setIsPlaying(true);
                     broadcastState('PLAYER_STATE', { isPlaying: true, song: currentSong });
+
+                    // Record History
+                    api.post('/music/history', {
+                        file_id: currentSong.id,
+                        duration: 0
+                    }).catch(e => console.error("Failed to record history", e));
                 })
                 .catch(e => console.error("Playback failed", e));
         }
@@ -120,9 +128,6 @@ export default function MusicLayout() {
     };
 
     const playSong = (song) => {
-        // If song is not in queue, add it to the front or replace? 
-        // Standard behavior: Play immediately.
-        // If we want to maintain the current queue context, we might want to insert it after current?
         if (!queue.find(s => s.id === song.id)) {
             setQueue(prev => [...prev, song]);
         }
@@ -137,7 +142,6 @@ export default function MusicLayout() {
     };
 
     const playNextInQueue = (song) => {
-        // Insert after current song
         if (!currentSong) {
             playSong(song);
             return;
@@ -175,46 +179,63 @@ export default function MusicLayout() {
         }
     };
 
-    const NavButton = ({ to, icon: Icon, label, colorClass = "bg-[var(--accent)]" }) => (
-        <button
-            onClick={() => navigate(to)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition ${location.pathname === to ? `${colorClass} text-black font-medium` : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'}`}
-        >
-            <Icon size={18} /> {label}
-        </button>
-    );
-
     return (
-        <div className="flex h-screen bg-[var(--bg-primary)] transition-colors duration-200 main-content-area">
-            <div className="desktop-sidebar">
-                <Sidebar
-                    currentFolder={null}
+        <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans selection:bg-pink-500 selection:text-white transition-colors duration-200">
+
+            {/* Left Rail (Icon Rail) */}
+            <div className="h-full flex-shrink-0 z-30">
+                <IconRail
                     onNavigate={(id) => { window.location.href = id ? `/?folder=${id}` : '/' }}
-                    collapsed={sidebarCollapsed}
+                    collapsed={false}
                     onToggleCollapse={() => setSidebarCollapsed(p => !p)}
                 />
             </div>
 
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
-                {/* Music Header */}
-                <div className="h-16 border-b border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-between px-6 z-40">
-                    <div className="flex items-center gap-4">
-                        <NavButton to="/music/discovery" icon={Sparkles} label="For You" colorClass="bg-gradient-to-r from-pink-500 to-purple-500 text-white" />
-                        <NavButton to="/music" icon={Music} label="Library" />
-                        <NavButton to="/music/playlists" icon={Disc} label="Playlists" />
-                        <NavButton to="/music/youtube" icon={Youtube} label="YouTube" colorClass="bg-red-500 text-white" />
-                        <NavButton to="/music/settings" icon={SettingsIcon} label="Settings" colorClass="bg-gray-500 text-white" />
+            {/* Music Sidebar (Sub-navigation) */}
+            <div className={`hidden md:block transition-all duration-300 ${sidebarCollapsed ? 'w-0 overflow-hidden' : 'w-64'} border-r border-[var(--sidebar-border)]`}>
+                <MusicSidebar />
+            </div>
+
+            {/* Content Wrapper (Main + Right Panel + Player) */}
+            <div className="flex-1 flex flex-col min-w-0 bg-[var(--bg-primary)]">
+
+                <div className="flex-1 flex overflow-hidden">
+                    {/* Main Content Area */}
+                    <main className="flex-1 flex flex-col min-w-0 relative">
+                        {/* Search / Top Bar */}
+                        <div className="h-20 flex items-center justify-between px-8 z-20">
+                            <div className="flex-1 max-w-xl">
+                                <SmartSearch onPlay={playSong} />
+                            </div>
+                            <div className="flex items-center gap-4 ml-4">
+                                <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden border border-white/10">
+                                    {/* User Avatar Placeholder */}
+                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 text-white font-bold">
+                                        {user?.username?.[0]?.toUpperCase() || 'U'}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto px-2 pb-24 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
+                            <Outlet context={{ playSong, addToQueue, playNextInQueue, currentSong, isPlaying, queue, setQueue }} />
+                        </div>
+                    </main>
+
+                    {/* Right Panel (Desktop Only) */}
+                    <div className="hidden xl:block h-full border-l border-[var(--border-color)]">
+                        <RightPanel
+                            currentSong={currentSong}
+                            isPlaying={isPlaying}
+                            onTogglePlay={togglePlay}
+                            onNext={playNext}
+                            onPrev={playPrev}
+                        />
                     </div>
-
-                    <SmartSearch onPlay={playSong} />
                 </div>
 
-                <div className="flex-1 overflow-y-auto pb-24">
-                    <Outlet context={{ playSong, addToQueue, playNextInQueue, currentSong, isPlaying, queue, setQueue }} />
-                </div>
-
-                {/* Persistent Player Footer */}
-                <div className="absolute bottom-0 left-0 right-0 z-50">
+                {/* Mobile/Tablet/Desktop Bottom Player (Always Visible) */}
+                <div className="flex-shrink-0 z-50 w-full relative">
                     <Player
                         currentSong={currentSong}
                         isPlaying={isPlaying}
@@ -224,7 +245,7 @@ export default function MusicLayout() {
                         audioRef={audioRef}
                     />
                 </div>
-            </main>
+            </div>
         </div>
     );
 }

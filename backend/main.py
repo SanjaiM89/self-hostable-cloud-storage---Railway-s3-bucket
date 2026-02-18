@@ -58,6 +58,14 @@ def ensure_schema_updates():
             conn.execute(text("ALTER TABLE users ADD COLUMN ai_config JSON DEFAULT '{}'"))
         except Exception:
             pass
+        try:
+            conn.execute(text("ALTER TABLE playlists ADD COLUMN is_generated BOOLEAN DEFAULT FALSE"))
+        except Exception:
+            pass
+        try:
+            conn.execute(text("ALTER TABLE playlists ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
+        except Exception:
+            pass
 
 
 def ensure_default_admin_user():
