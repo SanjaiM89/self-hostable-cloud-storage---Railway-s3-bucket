@@ -13,7 +13,7 @@ export default function Discovery() {
         setLoading(true);
         try {
             const res = await api.get('/music/recommendations'); // Use query param ?current_song_id=... if needed
-            setData(res.data);
+            setData(res.data || { recommendations: [], ai_playlist_name: "No Data" });
         } catch (err) {
             console.error("Failed to fetch recommendations", err);
         } finally {
@@ -57,7 +57,7 @@ export default function Discovery() {
             </div>
 
             {/* AI Playlist Section */}
-            {data.recommendations.length > 0 ? (
+            {data?.recommendations?.length > 0 ? (
                 <section>
                     <div className="flex items-center gap-3 mb-4">
                         <span className="text-2xl">✨</span>

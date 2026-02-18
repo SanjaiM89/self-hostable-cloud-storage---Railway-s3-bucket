@@ -34,86 +34,87 @@ export default function MusicHome() {
     }, []);
 
     return (
-        <div className="p-8 space-y-8 animate-fade-in text-white">
-            {/* Hero Section: Liked Songs */}
-            <div
-                className="relative h-64 rounded-3xl overflow-hidden cursor-pointer group"
-                onClick={() => navigate('/music/library')}
-            >
-                <div className="absolute inset-0 bg-gradient-to-r from-red-600 to-pink-600 z-0 group-hover:scale-105 transition-transform duration-500"></div>
-                <div className="absolute inset-0 bg-black/10 z-10"></div>
-                <div className="relative z-20 p-8 h-full flex flex-col justify-center">
-                    <h2 className="text-4xl font-bold mb-2 text-white">Your Liked Songs</h2>
-                    <p className="text-white/80 font-medium mb-6">{likedSongsCount} songs • 12 hr 30 min</p>
-                    <div className="flex gap-4">
-                        <button className="bg-white text-black px-6 py-3 rounded-full font-bold flex items-center gap-2 hover:bg-gray-100 transition shadow-lg">
-                            <Play size={20} fill="currentColor" /> Play
-                        </button>
-                    </div>
-                </div>
-                <div className="absolute right-10 bottom-0 opacity-20 transform translate-y-10 group-hover:translate-y-4 transition duration-500">
-                    <Heart size={200} fill="currentColor" />
+        <div className="p-8 space-y-8 animate-fade-in text-white pb-32">
+
+            {/* Greeting / Header */}
+            <div className="flex items-center justify-between mb-6">
+                <div>
+                    <h1 className="text-3xl font-bold text-[var(--text-primary)]">Home</h1>
+                    <p className="text-[var(--text-secondary)]">Welcome back to your library.</p>
                 </div>
             </div>
 
-            {/* Most Played (Horizontal) */}
-            <div>
+            {/* Most Played */}
+            <section>
                 <div className="flex justify-between items-end mb-4">
-                    <h3 className="text-xl font-bold">Most Played</h3>
-                    <button className="text-xs text-gray-400 hover:text-white transition">View All</button>
+                    <h2 className="text-xl font-bold text-[var(--text-primary)]">Most Played</h2>
+                    <button className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">View All</button>
                 </div>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                    {recentSongs.length === 0 ? <p className="text-gray-500">No songs yet.</p> : recentSongs.map(song => (
+                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide -mx-2 px-2">
+                    {recentSongs.length === 0 ? (
+                        <div className="text-[var(--text-secondary)] text-sm italic">Start listening to see your most played tracks.</div>
+                    ) : (
+                        recentSongs.map(song => (
+                            <div
+                                key={song.id}
+                                className="min-w-[160px] max-w-[160px] p-3 rounded-2xl hover:bg-[var(--card-bg-hover)] transition-all duration-300 cursor-pointer group"
+                                onClick={() => playSong(song)}
+                            >
+                                <div className="aspect-square rounded-xl bg-[var(--bg-tertiary)] mb-3 relative overflow-hidden shadow-lg group-hover:shadow-xl transition-all">
+                                    {song.cover_art ? (
+                                        <img src={song.cover_art} alt={song.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-[var(--text-tertiary)]"><Music size={32} /></div>
+                                    )}
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                                        <button className="w-10 h-10 rounded-full bg-[var(--accent)] text-white flex items-center justify-center transform scale-0 group-hover:scale-100 transition-transform duration-300 delay-75 shadow-lg">
+                                            <Play size={20} fill="currentColor" className="ml-0.5" />
+                                        </button>
+                                    </div>
+                                </div>
+                                <h4 className="font-bold truncate text-[var(--text-primary)] mb-1" title={song.title}>{song.title}</h4>
+                                <p className="text-xs text-[var(--text-secondary)] truncate" title={song.artist}>{song.artist}</p>
+                            </div>
+                        ))
+                    )}
+                </div>
+            </section>
+
+            {/* Hot Songs */}
+            <section>
+                <div className="flex justify-between items-end mb-4">
+                    <h2 className="text-xl font-bold text-[var(--text-primary)]">Hot This Week</h2>
+                    <button className="text-xs text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition">View All</button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {hotSongs.map((song, i) => (
                         <div
                             key={song.id}
-                            className="min-w-[160px] p-3 rounded-xl bg-white/5 hover:bg-white/10 transition cursor-pointer group"
+                            className="flex items-center gap-4 p-3 rounded-xl bg-[var(--card-bg)] hover:bg-[var(--card-bg-hover)] transition-colors cursor-pointer group border border-transparent hover:border-[var(--border-color)]"
                             onClick={() => playSong(song)}
                         >
-                            <div className="aspect-square rounded-lg bg-gray-800 mb-3 relative overflow-hidden">
+                            <span className="text-lg font-bold text-[var(--text-tertiary)] w-6 text-center">{i + 1}</span>
+                            <div className="w-14 h-14 rounded-lg bg-[var(--bg-tertiary)] flex-shrink-0 overflow-hidden relative">
                                 {song.cover_art ? (
                                     <img src={song.cover_art} alt={song.title} className="w-full h-full object-cover" />
                                 ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-600"><Music size={32} /></div>
+                                    <div className="w-full h-full flex items-center justify-center text-[var(--text-secondary)]"><Music size={16} /></div>
                                 )}
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                    <Play size={32} fill="white" className="text-white" />
+                                    <Play size={16} fill="white" className="text-white" />
                                 </div>
                             </div>
-                            <h4 className="font-semibold truncate text-sm">{song.title}</h4>
-                            <p className="text-xs text-gray-400 truncate">{song.artist}</p>
-                        </div>
-                    ))}
-                </div>
-            </div>
-
-            {/* Hot Songs (Horizontal / Grid) */}
-            <div>
-                <div className="flex justify-between items-end mb-4">
-                    <h3 className="text-xl font-bold">Hot Songs</h3>
-                    <button className="text-xs text-gray-400 hover:text-white transition">View All</button>
-                </div>
-                <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
-                    {hotSongs.length === 0 ? <p className="text-gray-500">No hot songs yet.</p> : hotSongs.map((song, i) => (
-                        <div
-                            key={song.id}
-                            className="min-w-[200px] flex items-center gap-3 p-3 rounded-xl bg-gradient-to-br from-white/5 to-transparent hover:bg-white/10 transition cursor-pointer group"
-                            onClick={() => playSong(song)}
-                        >
-                            <div className="w-16 h-16 rounded-lg bg-gray-800 flex-shrink-0 overflow-hidden relative">
-                                {song.cover_art ? (
-                                    <img src={song.cover_art} alt={song.title} className="w-full h-full object-cover" />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-gray-600 font-bold text-xl">{i + 1}</div>
-                                )}
+                            <div className="min-w-0 flex-1">
+                                <h4 className="font-medium truncate text-[var(--text-primary)]">{song.title}</h4>
+                                <p className="text-xs text-[var(--text-secondary)] truncate">{song.artist}</p>
                             </div>
-                            <div className="min-w-0">
-                                <h4 className="font-semibold truncate text-sm">{song.title}</h4>
-                                <p className="text-xs text-gray-400 truncate">{song.artist}</p>
+                            <div className="text-xs text-[var(--text-tertiary)]">
+                                {Math.floor(Math.random() * 5) + 2}:{Math.floor(Math.random() * 60).toString().padStart(2, '0')}
                             </div>
                         </div>
                     ))}
                 </div>
-            </div>
+            </section>
         </div>
     );
 }
