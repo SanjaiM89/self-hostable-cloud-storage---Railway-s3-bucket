@@ -16,8 +16,14 @@ except ImportError as e:
     DEPENDENCIES_AVAILABLE = False
     
 # Path to store the FAISS index and ID map
-DATA_DIR = os.path.join(os.path.dirname(__file__), "../../data")
-os.makedirs(DATA_DIR, exist_ok=True)
+# Path to store the FAISS index and ID map
+# Use /tmp for serverless environments where root is read-only
+DATA_DIR = "/tmp/audio_data"
+try:
+    os.makedirs(DATA_DIR, exist_ok=True)
+except Exception as e:
+    logger.warning(f"Failed to create data dir {DATA_DIR}: {e}")
+
 INDEX_PATH = os.path.join(DATA_DIR, "audio_features.index")
 MAP_PATH = os.path.join(DATA_DIR, "id_to_vector.json")
 
