@@ -213,9 +213,98 @@ def get_recommendations(
 # I will just insert `get_recommended_playlists` at line 149 and remove it from the bottom.
 # But `replace_file_content` is for single contiguous block.
 # I will use `multi_replace_file_content` or just two `replace_file_content` calls.
-# I will use `replace_file_content` to insert it at line 149.
-# And then another call to remove it from the bottom.
-# Actually, I can just use `multi_replace_file_content`.
+# --- Favorites ---
+
+def _get_favorites_playlist(db, user_id):
+    """Get or create the 'Favorites' playlist."""
+    playlist = db.query(Playlist).filter(
+        Playlist.user_id == user_id,
+        Playlist.name == "Favorites"
+    ).first()
+    
+    if not playlist:
+        playlist = Playlist(name="Favorites", user_id=user_id, is_generated=False)
+        db.add(playlist)
+        db.commit()
+        db.refresh(playlist)
+        
+    return playlist
+
+@router.get("/favorites")
+def get_favorites(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get songs in Favorites playlist."""
+    pl = _get_favorites_playlist(db, current_user.id)
+    
+    # Reuse logic? Or just join
+    songs = db.query(PlaylistSong, MusicMetadata, FileModel).join(
+        MusicMetadata, PlaylistSong.file_id == MusicMetadata.file_id
+    ).join(
+        FileModel, PlaylistSong.file_id == FileModel.id
+    ).filter(
+        PlaylistSong.playlist_id == pl.id
+    ).order_by(PlaylistSong.order).all()
+    
+    results = []
+    for ps, meta, file in songs:
+        results.append({
+            "id": file.id,
+            "title": meta.title,
+            "artist": meta.artist,
+            "album": meta.album,
+            "duration": meta.duration,
+            "cover_art": meta.cover_art,
+            "url": f"/api/files/{file.id}/stream",
+            "playlist_song_id": ps.id
+        })
+    return results
+
+@router.post("/favorites/{file_id}")
+def add_favorite(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Add a song to favorites."""
+    pl = _get_favorites_playlist(db, current_user.id)
+    
+    # Check if exists
+    exists = db.query(PlaylistSong).filter(
+        PlaylistSong.playlist_id == pl.id, 
+        PlaylistSong.file_id == file_id
+    ).first()
+    
+    if exists:
+        return {"message": "Already in favorites"}
+        
+    count = db.query(PlaylistSong).filter(PlaylistSong.playlist_id == pl.id).count()
+    item = PlaylistSong(playlist_id=pl.id, file_id=file_id, order=count)
+    db.add(item)
+    db.commit()
+    return {"message": "Added to favorites"}
+
+@router.delete("/favorites/{file_id}")
+def remove_favorite(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Remove a song from favorites."""
+    pl = _get_favorites_playlist(db, current_user.id)
+    
+    item = db.query(PlaylistSong).filter(
+        PlaylistSong.playlist_id == pl.id, 
+        PlaylistSong.file_id == file_id
+    ).first()
+    
+    if item:
+        db.delete(item)
+        db.commit()
+        return {"message": "Removed from favorites"}
+        
+    raise HTTPException(status_code=404, detail="Song not in favorites")
 
 
 

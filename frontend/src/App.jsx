@@ -15,6 +15,7 @@ const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const MusicLayout = lazy(() => import('./music/MusicLayout'));
 const MusicHome = lazy(() => import('./music/MusicHome'));
 const MusicLibrary = lazy(() => import('./music/MusicLibrary'));
+const Favorites = lazy(() => import('./music/Favorites'));
 const YouTube = lazy(() => import('./music/YouTube'));
 const Discovery = lazy(() => import('./music/Discovery'));
 const Playlists = lazy(() => import('./music/Playlists'));
@@ -120,6 +121,7 @@ export default function App() {
           >
             <Route index element={<MusicHome />} />
             <Route path="library" element={<MusicLibrary />} />
+            <Route path="favorites" element={<Favorites />} />
             <Route path="discovery" element={<Discovery />} />
             <Route path="playlists" element={<Playlists />} />
             <Route path="youtube" element={<YouTube />} />
