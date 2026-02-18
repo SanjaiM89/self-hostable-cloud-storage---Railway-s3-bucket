@@ -8,6 +8,8 @@ import SmartSearch from './SmartSearch';
 import { Youtube, Music, Sparkles, Settings as SettingsIcon, Disc } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import useMobile from '../mobile/useMobile';
+import MobileMusicNav from './mobile/MobileMusicNav';
 
 export default function MusicLayout() {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -79,20 +81,28 @@ export default function MusicLayout() {
 
     // Playback Logic
     useEffect(() => {
-        if (currentSong) {
-            // Ensure we use the full URL for audio
-            const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-            let fullUrl = currentSong.url.startsWith('http') ? currentSong.url : `${apiUrl}${currentSong.url}`;
+        const playAudio = async () => {
+            if (currentSong) {
+                try {
+                    // Fetch direct S3 URL to avoid 307 Redirect on audio element
+                    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+                    let streamEndpoint = currentSong.url;
 
-            // Append token for authentication
-            const token = localStorage.getItem('token');
-            if (token && !fullUrl.includes('token=')) {
-                fullUrl += fullUrl.includes('?') ? `&token=${token}` : `?token=${token}`;
-            }
+                    // If it's a relative URL, prepend API URL (though usually it is relative /api/...)
+                    if (!streamEndpoint.startsWith('http')) {
+                        streamEndpoint = streamEndpoint; // keep relative for axios
+                    }
 
-            audioRef.current.src = fullUrl;
-            audioRef.current.play()
-                .then(() => {
+                    // Request direct URL
+                    // Extract file ID from URL if possible, or just append ?redirect=false
+                    // currentSong.url is like "/api/files/{id}/stream"
+
+                    const res = await api.get(streamEndpoint, { params: { redirect: false } });
+                    const directUrl = res.data.url;
+
+                    audioRef.current.src = directUrl;
+
+                    await audioRef.current.play();
                     setIsPlaying(true);
                     broadcastState('PLAYER_STATE', { isPlaying: true, song: currentSong });
 
@@ -101,9 +111,14 @@ export default function MusicLayout() {
                         file_id: currentSong.id,
                         duration: 0
                     }).catch(e => console.error("Failed to record history", e));
-                })
-                .catch(e => console.error("Playback failed", e));
-        }
+
+                } catch (e) {
+                    console.error("Playback failed", e);
+                }
+            }
+        };
+
+        playAudio();
     }, [currentSong]);
 
     useEffect(() => {
@@ -179,6 +194,48 @@ export default function MusicLayout() {
         }
     };
 
+    const isMobile = useMobile();
+
+    if (isMobile) {
+        return (
+            <div className="flex flex-col h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans selection:bg-green-500 selection:text-white pb-[calc(64px+env(safe-area-inset-bottom))]">
+                {/* Mobile Header */}
+                <div className="h-16 flex items-center justify-between px-4 z-20 bg-[var(--bg-primary)]/80 backdrop-blur-md sticky top-0">
+                    <div className="flex-1 max-w-xl">
+                        <SmartSearch onPlay={playSong} />
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-gray-700 overflow-hidden border border-white/10 ml-3">
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 text-white text-xs font-bold">
+                            {user?.username?.[0]?.toUpperCase() || 'U'}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Main Content Area */}
+                <div className="flex-1 overflow-y-auto px-3 pb-24 scrollbar-hide">
+                    <Outlet context={{ playSong, addToQueue, playNextInQueue, currentSong, isPlaying, queue, setQueue }} />
+                </div>
+
+                {/* Player (Floating above Nav) */}
+                {currentSong && (
+                    <div className="fixed left-0 right-0 z-[55]" style={{ bottom: 'calc(60px + env(safe-area-inset-bottom))' }}>
+                        <Player
+                            currentSong={currentSong}
+                            isPlaying={isPlaying}
+                            onTogglePlay={togglePlay}
+                            onNext={playNext}
+                            onPrev={playPrev}
+                            audioRef={audioRef}
+                        />
+                    </div>
+                )}
+
+                {/* Navigation */}
+                <MobileMusicNav />
+            </div>
+        );
+    }
+
     return (
         <div className="flex h-screen bg-[var(--bg-primary)] text-[var(--text-primary)] overflow-hidden font-sans selection:bg-green-500 selection:text-white transition-colors duration-200">
 
@@ -203,17 +260,9 @@ export default function MusicLayout() {
                     {/* Main Content Area */}
                     <main className="flex-1 flex flex-col min-w-0 relative">
                         {/* Search / Top Bar */}
-                        <div className="h-20 flex items-center justify-between px-8 z-20">
+                        <div className="h-20 flex items-center px-8 z-20">
                             <div className="flex-1 max-w-xl">
                                 <SmartSearch onPlay={playSong} />
-                            </div>
-                            <div className="flex items-center gap-4 ml-4">
-                                <div className="w-10 h-10 rounded-full bg-gray-700 overflow-hidden border border-white/10">
-                                    {/* User Avatar Placeholder */}
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-yellow-400 to-orange-500 text-white font-bold">
-                                        {user?.username?.[0]?.toUpperCase() || 'U'}
-                                    </div>
-                                </div>
                             </div>
                         </div>
 

@@ -111,6 +111,7 @@ export default function AdminPage() {
                         <th className="text-left p-3">Role</th>
                         <th className="text-left p-3">Plan</th>
                         <th className="text-left p-3">Used</th>
+                        <th className="text-left p-3">Custom Storage</th>
                         <th className="text-left p-3">Confirm Plan Assignment</th>
                       </tr>
                     </thead>
@@ -137,7 +138,42 @@ export default function AdminPage() {
                               Current: {u.plan_id ? plans.find(p => p.id === u.plan_id)?.name : 'None'}
                             </div>
                           </td>
-                          <td className="p-3">{formatSize(u.storage_used)}</td>
+                          <td className="p-3">
+                            <div>{formatSize(u.storage_used)}</div>
+                            <div className="text-xs text-[var(--text-tertiary)]">of {formatSize(u.storage_limit)}</div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0.1"
+                                step="0.1"
+                                placeholder={`${(u.storage_limit / GB).toFixed(1)}`}
+                                value={limits[u.id]?.customGB || ''}
+                                onChange={(e) => setLimits(prev => ({ ...prev, [u.id]: { ...prev[u.id], customGB: e.target.value } }))}
+                                className="w-20 px-2 py-1 rounded border border-[var(--border-color)] bg-[var(--bg-secondary)] text-sm"
+                              />
+                              <span className="text-xs text-[var(--text-tertiary)]">GB</span>
+                              <button
+                                className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-medium disabled:opacity-50 hover:bg-blue-500 transition"
+                                disabled={!limits[u.id]?.customGB}
+                                onClick={async () => {
+                                  try {
+                                    const gb = parseFloat(limits[u.id]?.customGB);
+                                    if (isNaN(gb) || gb < 0.1) { setNotice('Enter a valid value (min 0.1 GB)'); return; }
+                                    await adminAPI.updateUserStorage(u.id, Math.round(gb * GB));
+                                    setNotice(`Set ${u.username}'s storage to ${gb} GB`);
+                                    setLimits(prev => ({ ...prev, [u.id]: { ...prev[u.id], customGB: '' } }));
+                                    await loadUsers();
+                                  } catch (err) {
+                                    setNotice(err?.response?.data?.detail || 'Failed to update storage');
+                                  }
+                                }}
+                              >
+                                Set
+                              </button>
+                            </div>
+                          </td>
                           <td className="p-3">
                             <button
                               className="px-3 py-1.5 rounded bg-[var(--accent)] text-black font-medium text-sm disabled:opacity-50"

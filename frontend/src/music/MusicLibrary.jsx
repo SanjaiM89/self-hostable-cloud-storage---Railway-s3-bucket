@@ -17,8 +17,20 @@ export default function MusicLibrary() {
     const [newPlaylistName, setNewPlaylistName] = useState('');
     const [showAddToPlaylist, setShowAddToPlaylist] = useState(null); // song object to add
 
+    const CACHE_KEY = 'music_library_cache';
+
     const fetchData = async () => {
-        setLoading(true);
+        // Load from cache first
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached) {
+                const { songs: cachedSongs, playlists: cachedPlaylists } = JSON.parse(cached);
+                if (cachedSongs) setSongs(cachedSongs);
+                if (cachedPlaylists) setPlaylists(cachedPlaylists);
+                setLoading(false);
+            }
+        } catch (e) { /* ignore */ }
+
         try {
             const [songsRes, playlistsRes] = await Promise.all([
                 api.get('/music/songs'),
@@ -26,6 +38,12 @@ export default function MusicLibrary() {
             ]);
             setSongs(songsRes.data);
             setPlaylists(playlistsRes.data);
+
+            // Update cache
+            localStorage.setItem(CACHE_KEY, JSON.stringify({
+                songs: songsRes.data,
+                playlists: playlistsRes.data
+            }));
         } catch (e) {
             console.error(e);
         } finally {

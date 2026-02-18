@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import api from '../utils/api';
+import Loader from '../components/Loader';
 import SongContextMenu from './SongContextMenu';
 import { Play } from 'lucide-react';
+
+const CACHE_KEY = 'music_discovery_cache';
 
 export default function Discovery() {
     const { playSong } = useOutletContext();
@@ -10,10 +13,25 @@ export default function Discovery() {
     const [loading, setLoading] = useState(true);
 
     const fetchData = async () => {
-        setLoading(true);
+        // Load from cache first
         try {
-            const res = await api.get('/music/recommendations'); // Use query param ?current_song_id=... if needed
-            setData(res.data || { recommendations: [], ai_playlist_name: "No Data" });
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (parsed && parsed.recommendations) {
+                    setData(parsed);
+                    setLoading(false);
+                }
+            }
+        } catch (e) { /* ignore */ }
+
+        try {
+            const res = await api.get('/music/recommendations');
+            const result = res.data || { recommendations: [], ai_playlist_name: "No Data" };
+            setData(result);
+
+            // Update cache
+            localStorage.setItem(CACHE_KEY, JSON.stringify(result));
         } catch (err) {
             console.error("Failed to fetch recommendations", err);
         } finally {
@@ -32,10 +50,10 @@ export default function Discovery() {
         return `${mins}:${secs.toString().padStart(2, '0')}`;
     };
 
-    if (loading) {
+    if (loading && (!data?.recommendations || data.recommendations.length === 0)) {
         return (
             <div className="flex items-center justify-center h-64">
-                <div className="w-10 h-10 border-2 border-pink-500/30 border-t-pink-500 rounded-full animate-spin"></div>
+                <Loader />
             </div>
         );
     }

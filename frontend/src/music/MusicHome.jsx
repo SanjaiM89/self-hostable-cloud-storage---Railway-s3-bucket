@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useOutletContext, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import Loader from '../components/Loader';
 import { Play, Heart, Clock, Music } from 'lucide-react';
+
+const CACHE_KEY = 'music_home_cache';
 
 export default function MusicHome() {
     const { playSong, addToQueue } = useOutletContext();
@@ -9,29 +12,52 @@ export default function MusicHome() {
     const [recentSongs, setRecentSongs] = useState([]);
     const [hotSongs, setHotSongs] = useState([]);
     const [likedSongsCount, setLikedSongsCount] = useState(0);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Fetch data
+        // Load from cache first
+        try {
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached) {
+                const { recent, hot, count } = JSON.parse(cached);
+                setRecentSongs(recent || []);
+                setHotSongs(hot || []);
+                setLikedSongsCount(count || 0);
+                setLoading(false);
+            }
+        } catch (e) { /* ignore parse errors */ }
+
         const loadData = async () => {
             try {
-                // Mocking "Most Played" and "Hot" with random slices of all songs for now
                 const res = await api.get('/music/songs');
                 const allSongs = res.data;
 
-                // Shuffle for "Hot"
                 const shuffled = [...allSongs].sort(() => 0.5 - Math.random());
-                setHotSongs(shuffled.slice(0, 5));
+                const hot = shuffled.slice(0, 5);
+                const recent = allSongs.slice(0, 6);
 
-                // Take first few for "Recent" (effectively "Most Played" mock)
-                setRecentSongs(allSongs.slice(0, 6));
+                setHotSongs(hot);
+                setRecentSongs(recent);
+                setLikedSongsCount(allSongs.length);
 
-                setLikedSongsCount(allSongs.length); // Assuming all in library are "Liked" for now
+                // Save to cache
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ recent, hot, count: allSongs.length }));
             } catch (e) {
                 console.error("Failed to load music home data", e);
+            } finally {
+                setLoading(false);
             }
         };
         loadData();
     }, []);
+
+    if (loading && recentSongs.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <Loader />
+            </div>
+        );
+    }
 
     return (
         <div className="p-8 space-y-8 animate-fade-in text-white pb-32">

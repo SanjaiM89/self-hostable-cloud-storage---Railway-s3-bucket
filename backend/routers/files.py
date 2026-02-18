@@ -478,6 +478,7 @@ def get_file_content(
 def stream_file(
     file_id: int,
     request: Request,
+    redirect: bool = True,
     db: Session = Depends(get_db),
 ):
     """Stream file content (support for audio/video)."""
@@ -496,8 +497,10 @@ def stream_file(
          # Remove 'Bearer ' prefix if present
          if token.startswith("Bearer "): token = token.split(" ")[1]
     
-    if not token:
+    if not token and redirect:
         # Fallback: Check if file is shared publicly? For now, strict.
+        # ALLOW if it's a browser request relying on cookies (handled above)
+        # If no token found at all:
         raise HTTPException(status_code=401, detail="Not authenticated")
         
     # Verify Token (Manual decode to avoid Dependency issues in stream)
@@ -535,8 +538,11 @@ def stream_file(
             Params={'Bucket': BUCKET_NAME, 'Key': file.s3_key},
             ExpiresIn=3600
         )
-        from fastapi.responses import RedirectResponse
-        return RedirectResponse(url=url)
+        if redirect:
+            from fastapi.responses import RedirectResponse
+            return RedirectResponse(url=url)
+        else:
+            return {"url": url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate stream URL: {e}")
 
