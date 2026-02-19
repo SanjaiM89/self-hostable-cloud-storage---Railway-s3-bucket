@@ -37,56 +37,86 @@ class RecommendationEngine:
         # For now, let's just trigger it.
         self.generate_daily_mix(db, user_id)
 
-    def generate_daily_mix(self, db: Session, user_id: int):
-        """Generate or update 'Daily Mix' playlists."""
-        # Check if we have a Daily Mix generated recently (e.g., in the last hour)
+    def generate_mix(self, db: Session, user_id: int, name: str, strategy: str = "daily"):
+        """Generate or update a playlist based on strategy."""
+        # Check existing
         existing_mix = db.query(Playlist).filter(
             Playlist.user_id == user_id,
             Playlist.is_generated == True,
-            Playlist.name.like("Daily Mix%")
+            Playlist.name == name
         ).first()
 
+        # Check if fresh ( < 1 hour old)
         if existing_mix and existing_mix.last_updated > datetime.datetime.utcnow() - datetime.timedelta(hours=1):
             return existing_mix
 
-        # Generate new mix
-        # 1. Get top listened songs in last 30 days
-        thirty_days_ago = datetime.datetime.utcnow() - datetime.timedelta(days=30)
-        top_songs = db.query(ListenHistory.file_id, func.count(ListenHistory.id).label('count'))\
-            .filter(ListenHistory.user_id == user_id, ListenHistory.played_at > thirty_days_ago)\
-            .group_by(ListenHistory.file_id)\
-            .order_by(desc('count'))\
-            .limit(10)\
-            .all()
-
-        if not top_songs:
-            return None
-
-        # 2. Get recommendations based on these songs (Content-Based Filtering via AudioRecommender)
-        seed_ids = [s[0] for s in top_songs]
-        recommended_ids = set()
+        # Generate Song IDs based on strategy
+        final_song_ids = []
+        print(f"DEBUG: Generating mix '{name}' with strategy '{strategy}'")
         
-        # Add seeds themselves
-        for seed in seed_ids:
-            recommended_ids.add(seed)
+        if strategy == "daily":
+            # Top songs last 30 days + similar
+            thirty_days_ago = datetime.datetime.utcnow() - datetime.timedelta(days=30)
+            top_songs = db.query(ListenHistory.file_id, func.count(ListenHistory.id).label('count'))\
+                .filter(ListenHistory.user_id == user_id, ListenHistory.played_at > thirty_days_ago)\
+                .group_by(ListenHistory.file_id)\
+                .order_by(desc('count'))\
+                .limit(10)\
+                .all()
+            
+            print(f"DEBUG: Strategy daily found {len(top_songs)} top songs")
+            
+            if top_songs:
+                seed_ids = [s[0] for s in top_songs]
+                final_song_ids.extend(seed_ids)
+                for seed in seed_ids:
+                    similar = audio_recommender.find_similar(seed, limit=2)
+                    final_song_ids.extend(similar)
 
-        # Find similar
-        for seed in seed_ids:
-            similar = audio_recommender.find_similar(seed, limit=3)
-            recommended_ids.update(similar)
+        elif strategy == "discovery":
+            # Random songs user hasn't played much (or at all)
+            # For simplicity: Random from library
+            all_files = db.query(MusicMetadata.file_id).all()
+            all_ids = [f[0] for f in all_files]
+            print(f"DEBUG: Strategy discovery found {len(all_ids)} total songs")
+            if all_ids:
+                final_song_ids = random.sample(all_ids, min(20, len(all_ids)))
 
-        # 3. Create/Update Playlist
-        final_song_ids = list(recommended_ids)
+        elif strategy == "quick_picks":
+            # Recently played + random favorites
+            # Get processed favorites logic or just recent history
+            recent = db.query(ListenHistory.file_id)\
+                .filter(ListenHistory.user_id == user_id)\
+                .order_by(ListenHistory.played_at.desc())\
+                .limit(10)\
+                .all()
+            print(f"DEBUG: Strategy quick_picks found {len(recent)} recent songs")
+            
+            if recent:
+                ids = [r[0] for r in recent]
+                final_song_ids.extend(ids)
+                # Augmented with random from library to fill up
+                all_files = db.query(MusicMetadata.file_id).all()
+                all_ids = [f[0] for f in all_files]
+                remaining = 20 - len(ids)
+                if remaining > 0 and all_ids:
+                    final_song_ids.extend(random.sample(all_ids, min(remaining, len(all_ids))))
+
+        # Deduplicate and Shuffle
+        final_song_ids = list(set(final_song_ids))
         random.shuffle(final_song_ids)
-        final_song_ids = final_song_ids[:20] # Limit to 20 songs
+        final_song_ids = final_song_ids[:25] # Cap at 25
+
+        if not final_song_ids:
+            return existing_mix # Return old mix if generation failed (e.g. no history)
 
         if not existing_mix:
             existing_mix = Playlist(
                 user_id=user_id,
-                name=f"Daily Mix",
-                description="Generated based on your listening history.",
+                name=name,
+                description=f"Fresh {name} for you.",
                 is_generated=True,
-                cover_image=None # Frontend will handle default cover
+                cover_image=None 
             )
             db.add(existing_mix)
             db.commit()
@@ -107,5 +137,20 @@ class RecommendationEngine:
         
         db.commit()
         return existing_mix
+
+    def generate_all_mixes(self, db: Session, user_id: int):
+        """Generate all standard mixes."""
+        mixes = []
+        
+        m1 = self.generate_mix(db, user_id, "Daily Mix", "daily")
+        if m1: mixes.append(m1)
+        
+        m2 = self.generate_mix(db, user_id, "Discovery Mix", "discovery")
+        if m2: mixes.append(m2)
+        
+        m3 = self.generate_mix(db, user_id, "Quick Picks", "quick_picks")
+        if m3: mixes.append(m3)
+            
+        return mixes
 
 recommendation_engine = RecommendationEngine()

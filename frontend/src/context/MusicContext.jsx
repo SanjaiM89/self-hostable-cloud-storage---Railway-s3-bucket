@@ -114,14 +114,51 @@ export function MusicProvider({ children }) {
         setQueue(newQueue);
     }, [currentSong, queue, playSong]);
 
-    const playNext = useCallback(() => {
+    const playNext = useCallback(async () => {
         if (!currentSong || queue.length === 0) return;
         const currentIndex = queue.findIndex(s => s.id === currentSong.id);
         const nextSong = queue[currentIndex + 1];
+
         if (nextSong) {
             setCurrentSong(nextSong);
             broadcastState('PLAYER_STATE', { isPlaying: true, song: nextSong });
         } else {
+            // End of queue - fetch recommendation
+            console.log("End of queue, fetching recommendation...");
+            try {
+                // Use current song as seed
+                // Backend expects 'current_song_id'
+                console.log("Fetching recs via API...");
+                const res = await api.get('/music/recommendations', { params: { current_song_id: currentSong.id, limit: 1 } });
+                console.log("Rec API Response:", res.data);
+
+                // Response format is { recommendations: [], ai_playlist_name: ... }
+                const recommended = res.data.recommendations;
+
+                if (recommended && recommended.length > 0) {
+                    // Try to find a track that isn't the current one
+                    const nextTrack = recommended.find(track => track.id !== currentSong.id);
+
+                    if (nextTrack) {
+                        console.log("Next recommended track found:", nextTrack.title, nextTrack.id);
+                        setQueue(prev => {
+                            console.log("Updating queue with new track");
+                            return [...prev, nextTrack];
+                        });
+                        setCurrentSong(nextTrack);
+                        broadcastState('PLAYER_STATE', { isPlaying: true, song: nextTrack });
+                        return; // Successfully played recommended
+                    } else {
+                        console.log("Only duplicate recommendation found (IDs match).");
+                    }
+                } else {
+                    console.log("No recommendations returned in array.");
+                }
+            } catch (err) {
+                console.error("Failed to fetch recommendation:", err);
+            }
+
+            // If recommendation failed or returned nothing, stop.
             setIsPlaying(false);
             broadcastState('PLAYER_STATE', { isPlaying: false });
         }
