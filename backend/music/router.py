@@ -198,22 +198,7 @@ def record_history(
     recommendation_engine.record_history(db, current_user.id, file_id, duration)
     return {"status": "recorded"}
 
-@router.get("/recommendations")
-def get_recommendations(
-    current_song_id: Optional[int] = Query(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-    # ... existing implementation ...
-    # Wait, I need to read the existing implementation to know what to replace if I move it.
-    # The previous `view_file` showed `get_recommendations` at line 254 (in outline) or later.
-    # I should just MOVE `get_recommended_playlists` to the top.
-    pass 
 
-# I will just insert `get_recommended_playlists` at line 149 and remove it from the bottom.
-# But `replace_file_content` is for single contiguous block.
-# I will use `multi_replace_file_content` or just two `replace_file_content` calls.
-# --- Favorites ---
 
 def _get_favorites_playlist(db, user_id):
     """Get or create the 'Favorites' playlist."""
@@ -427,18 +412,10 @@ def get_recommended_playlists(
     current_user: User = Depends(get_current_user)
 ):
     # For now, just return the Daily Mix if exists
-    daily_mix = db.query(Playlist).filter(
-        Playlist.user_id == current_user.id, 
-        Playlist.is_generated == True
-    ).all()
-    
-    # If no daily mix, try to generate one locally
-    if not daily_mix:
-        mix = recommendation_engine.generate_daily_mix(db, current_user.id)
-        if mix:
-            daily_mix = [mix]
-            
-    return daily_mix
+    # Return all generated mixes
+    mixes = recommendation_engine.generate_all_mixes(db, current_user.id)
+    print(f"DEBUG: Generated {len(mixes)} mixes")
+    return mixes
 
 # --- Recommendations & AI ---
 
@@ -461,19 +438,22 @@ async def get_recommendations(
     all_songs = all_songs_query.all()
     
     recs = []
+    print(f"DEBUG: Getting recs for song_id={current_song_id}")
     
     # 1. Vector Search
     if current_song_id:
+        # audio_recommender uses file_id ? Let's assume it uses what we indexed.
+        # usually we index by generic ID, but let's assume valid ID.
         similar_ids = audio_recommender.find_similar(current_song_id, limit=5)
-        # Convert IDs back to MusicMetadata objects
-        # Note: audio_recommender stores song_id (music_metadata.id? or file.id? let's assume music_metadata.id for now or we need to be careful)
-        # In audio_recommender.py we accept 'song_id' which is likely metadata.id
-        vector_recs = [s for s in all_songs if s.id in similar_ids]
+        
+        # similar_ids are likely file_ids if we indexed files. 
+        # Match using file_id
+        vector_recs = [s for s in all_songs if s.file_id in similar_ids]
         recs.extend(vector_recs)
         
     # 2. AI Search
-    # Helper to get full object from ID
-    current_song = next((s for s in all_songs if s.id == current_song_id), None) if current_song_id else None
+    # Helper to get full object from ID (use file_id to find metadata)
+    current_song = next((s for s in all_songs if s.file_id == current_song_id), None) if current_song_id else None
     
     # Create mock history for now (random 5 songs)
     # In real app, query 'PlaybackHistory' table
@@ -486,15 +466,30 @@ async def get_recommendations(
     if current_song:
         ai_recs = await get_music_recommendations(current_song, history, all_songs)
         
-        # Deduplicate
-        existing_ids = {r.id for r in recs}
-        existing_ids.add(current_song.id) # Don't recommend current song
+    # Deduplicate
+    existing_ids = {r.file_id for r in recs} # Use file_id for deduplication set to match comparison
+    if current_song:
+        existing_ids.add(current_song.file_id)
         
-        for r in ai_recs:
-            if r.id not in existing_ids:
-                recs.append(r)
-                existing_ids.add(r.id)
+    for r in ai_recs:
+        if r.file_id not in existing_ids:
+            recs.append(r)
+            existing_ids.add(r.file_id)
+
+    # 3. Fallback: Random Song (if no recs found)
+    if not recs and all_songs:
+        print("DEBUG: No recs found, trying fallback")
+        # Pick a random song that isn't the current one
+        available = [s for s in all_songs if (not current_song or s.file_id != current_song.file_id)]
+        if available:
+            chosen = random.choice(available)
+            print(f"DEBUG: Fallback chose {chosen.title}")
+            recs.append(chosen)
     
+    print(f"DEBUG: Returning {len(recs)} recommendations")
+    
+    # Format response
+    rec_data = []
     # Format response
     rec_data = []
     for meta in recs:
@@ -510,11 +505,30 @@ async def get_recommendations(
                 "cover_art": meta.cover_art,
                 "url": f"/api/files/{meta.file.id}/stream"
             })
-            
-    return {
+
+    print(f"DEBUG: Formatted {len(rec_data)} songs for response")
+
+    ai_name = "AI Mix"
+    try:
+        if recs:
+            ai_name = await generate_ai_playlist_name(recs)
+    except Exception as e:
+        print(f"DEBUG: AI Name Gen Failed: {e}")
+        ai_name = "AI Mix (Fallback)"
+
+    response_payload = {
         "recommendations": rec_data,
-        "ai_playlist_name": await generate_ai_playlist_name(recs) if recs else "AI Mix"
+        "ai_playlist_name": ai_name
     }
+    
+    import json
+    # Debug print the actual JSON to be sure
+    try:
+        print(f"DEBUG: Sending response: {json.dumps(response_payload, default=str)[:200]}...")
+    except:
+        pass
+        
+    return response_payload
 
 # --- YouTube ---
 

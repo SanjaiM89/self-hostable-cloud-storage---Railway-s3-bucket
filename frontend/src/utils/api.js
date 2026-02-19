@@ -157,3 +157,13 @@ export const paymentsAPI = {
     createOrder: (planId) => api.post('/payments/create-order', { plan_id: planId }),
     verify: (data) => api.post('/payments/verify', data),
 };
+
+export const musicAPI = {
+    list: () => api.get('/music/'),
+    process: (fileId) => api.post(`/music/process/${fileId}`),
+    favorites: () => api.get('/music/favorites'),
+    toggleFavorite: (fileId) => api.post(`/music/favorites/${fileId}`),
+    getRecommendations: (seedSongId) => api.get('/music/recommendations', { params: { seed_id: seedSongId, limit: 1 } }),
+    // Record history if needed manually, though context does it.
+    recordHistory: (fileId, duration) => api.post('/music/history', { file_id: fileId, duration }),
+};
