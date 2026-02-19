@@ -7,6 +7,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { WebSocketProvider } from './context/WebSocketContext';
 import { AIProvider } from './context/AIContext';
+import { MusicProvider } from './context/MusicContext';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
@@ -14,7 +15,9 @@ ReactDOM.createRoot(document.getElementById('root')).render(
       <WebSocketProvider>
         <ThemeProvider>
           <AIProvider>
-            <App />
+            <MusicProvider>
+              <App />
+            </MusicProvider>
           </AIProvider>
         </ThemeProvider>
       </WebSocketProvider>
