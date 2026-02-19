@@ -125,8 +125,168 @@ export async function uploadFolder(fileList, rootFolderId, onProgress) {
             }
         }
     };
-
     await runQueue();
 
+    if (onProgress) onProgress(totalFiles, totalFiles, 'Upload complete!');
+}
+
+/**
+ * Recursively scans DataTransferItems/Entries for files.
+ * @param {DataTransferItemList} items 
+ * @returns {Promise<Array<{file: File, path: string}>>}
+ */
+export async function scanEntries(items) {
+    const queue = [];
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.webkitGetAsEntry) {
+            queue.push(item.webkitGetAsEntry());
+        } else if (item.getAsEntry) {
+            queue.push(item.getAsEntry());
+        }
+    }
+
+    const result = [];
+
+    const readEntry = async (entry, path = '') => {
+        if (entry.isFile) {
+            return new Promise((resolve) => {
+                entry.file(file => {
+                    // Manually set/override webkitRelativePath if possible, 
+                    // or just return the path structure we need.
+                    // We'll return an object { file, path: fullPath including filename }
+                    const fullPath = path ? `${path}/${entry.name}` : entry.name;
+                    result.push({ file, path: fullPath });
+                    resolve();
+                });
+            });
+        } else if (entry.isDirectory) {
+            const dirReader = entry.createReader();
+            const newPath = path ? `${path}/${entry.name}` : entry.name;
+
+            // readEntries might not return all entries in one call
+            const readAllEntries = async () => {
+                let entries = [];
+                let read = true;
+                while (read) {
+                    await new Promise((resolve) => {
+                        dirReader.readEntries((results) => {
+                            if (results.length === 0) {
+                                read = false;
+                            } else {
+                                entries = entries.concat(results);
+                            }
+                            resolve();
+                        });
+                    });
+                }
+
+                // Process entries in parallel
+                await Promise.all(entries.map(e => readEntry(e, newPath)));
+            };
+
+            await readAllEntries();
+        }
+    };
+
+    await Promise.all(queue.map(e => readEntry(e, '')));
+    return result;
+}
+
+/**
+ * Uploads files with explicit paths (from DnD).
+ * @param {Array<{file: File, path: string}>} filesWithPaths 
+ * @param {string|number|null} rootFolderId 
+ * @param {function} onProgress 
+ */
+export async function uploadScannedEntries(filesWithPaths, rootFolderId, onProgress) {
+    const totalFiles = filesWithPaths.length;
+
+    // 1. Identify folders
+    const folderPaths = new Set();
+    const fileMap = [];
+
+    filesWithPaths.forEach(({ file, path }) => {
+        // path is like "Folder/Sub/file.txt"
+        const pathParts = path.split('/');
+        pathParts.pop(); // remove filename
+
+        if (pathParts.length > 0) {
+            let currentPath = '';
+            pathParts.forEach(part => {
+                currentPath = currentPath ? `${currentPath}/${part}` : part;
+                folderPaths.add(currentPath);
+            });
+        }
+
+        fileMap.push({ file, folderPath: pathParts.join('/') });
+    });
+
+    // 2. Sort folders
+    const sortedPaths = Array.from(folderPaths).sort((a, b) => a.split('/').length - b.split('/').length);
+
+    // 3. Create folders
+    const folderIdMap = new Map();
+    folderIdMap.set('', rootFolderId);
+
+    let foldersCreated = 0;
+    const totalFolders = sortedPaths.length;
+
+    if (onProgress) onProgress(0, totalFiles, `Creating ${totalFolders} folders...`);
+
+    for (const path of sortedPaths) {
+        const parts = path.split('/');
+        const folderName = parts.pop();
+        const parentPath = parts.join('/');
+        const parentId = folderIdMap.get(parentPath);
+
+        try {
+            const res = await filesAPI.createFolder(folderName, parentId);
+            folderIdMap.set(path, res.data.id);
+            foldersCreated++;
+            if (onProgress) onProgress(0, totalFiles, `Created folder ${foldersCreated}/${totalFolders}`);
+        } catch (err) {
+            console.error(`Failed to create folder ${path}`, err);
+        }
+    }
+
+    // 4. Upload Files
+    const CONCURRENCY = 3;
+    let uploadedCount = 0;
+
+    const uploadFile = async (item) => {
+        const { file, folderPath } = item;
+        const parentId = folderIdMap.get(folderPath);
+
+        if (parentId === undefined) return;
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            if (parentId) formData.append('parent_id', parentId);
+
+            await filesAPI.upload(formData);
+            uploadedCount++;
+            if (onProgress) onProgress(uploadedCount, totalFiles, `Uploaded ${uploadedCount}/${totalFiles}`);
+        } catch (err) {
+            console.error(`Failed to upload ${file.name}`, err);
+        }
+    };
+
+    const queue = [...fileMap];
+    const runQueue = async () => {
+        const promises = [];
+        while (queue.length > 0 || promises.length > 0) {
+            while (queue.length > 0 && promises.length < CONCURRENCY) {
+                const item = queue.shift();
+                const p = uploadFile(item).then(() => promises.splice(promises.indexOf(p), 1));
+                promises.push(p);
+            }
+            if (promises.length > 0) await Promise.race(promises);
+            else break;
+        }
+    };
+
+    await runQueue();
     if (onProgress) onProgress(totalFiles, totalFiles, 'Upload complete!');
 }

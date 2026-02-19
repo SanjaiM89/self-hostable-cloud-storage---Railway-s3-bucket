@@ -1,833 +1,302 @@
-import { useState, useEffect, useCallback, useRef, useMemo, useDeferredValue } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import InputModal from '../components/InputModal';
-
 import { useWebSocket } from '../context/WebSocketContext';
 import Sidebar from '../components/Sidebar';
-import Navbar from '../components/Navbar';
-import FileGrid from '../components/FileGrid';
+import ContentPane from '../components/ContentPane';
+import Loader from '../components/Loader';
 import ActivityBar from '../components/ActivityBar';
-import MarkdownEditor from '../components/MarkdownEditor';
-import PdfViewer from '../components/PdfViewer';
+import MediaViewerModal from '../components/MediaViewerModal';
+import { useMobile, MobileNav, MobileMediaViewer } from '../mobile';
 import { filesAPI } from '../utils/api';
+import { GripHorizontal, X } from 'lucide-react';
 
 let activityIdCounter = 0;
 
-import MediaViewerModal from '../components/MediaViewerModal';
-import { uploadFolder } from '../utils/folderUpload';
-import SearchModal from '../components/SearchModal';
-import Loader from '../components/Loader';
-import { useMobile, MobileNav, MobileActionSheet, MobileMediaViewer } from '../mobile';
-import ShareModal from '../components/ShareModal';
-import SelectionBar from '../components/SelectionBar';
-
-
-function normalizeListResponse(payload) {
-    if (Array.isArray(payload)) {
-        return { items: payload, hasMore: false };
-    }
-    if (payload && Array.isArray(payload.items)) {
-        return { items: payload.items, hasMore: Boolean(payload.has_more) };
-    }
-    return { items: [], hasMore: false };
-}
-
 export default function Dashboard() {
-    const [files, setFiles] = useState([]);
-    const [currentFolder, setCurrentFolder] = useState(null);
-    const [breadcrumbs, setBreadcrumbs] = useState([{ id: null, name: 'Home' }]);
-    const [mediaFile, setMediaFile] = useState(null);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [viewMode, setViewMode] = useState('grid');
-    const [loading, setLoading] = useState(false);
-    const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    const [activityOpen, setActivityOpen] = useState(false);
-    const [activities, setActivities] = useState([]);
-    const [viewScope, setViewScope] = useState('files');
-    const [selectedIds, setSelectedIds] = useState([]);
-    const selectedFiles = files ? files.filter(f => selectedIds.includes(f.id)) : [];
-    const [searchOpen, setSearchOpen] = useState(false);
-    const [mobileActionFile, setMobileActionFile] = useState(null);
-    const [shareFile, setShareFile] = useState(null);
-    const [clipboard, setClipboard] = useState({ op: null, items: [] });
-    const [inputModal, setInputModal] = useState(null);
-    const isMobile = useMobile();
-
-    // Inline editor state
-    const [editingFile, setEditingFile] = useState(null);
-    const [editorConfig, setEditorConfig] = useState(null);
-    const [saveStatus, setSaveStatus] = useState('saved'); // 'saved', 'unsaved'
-    const editorContainerRef = useRef(null);
-    const editorInstanceRef = useRef(null);
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const { subscribe } = useWebSocket();
+    const isMobile = useMobile();
 
-    // Markdown editor state
-    const [markdownFile, setMarkdownFile] = useState(null);
+    // ─── Pane Management ───
+    const [panes, setPanes] = useState([
+        { id: 'pane-1', folderId: null, scope: 'files' }
+    ]);
+    const [activePaneId, setActivePaneId] = useState('pane-1');
+    const [activities, setActivities] = useState([]);
+    const [activityOpen, setActivityOpen] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [clipboard, setClipboard] = useState({ op: null, items: [] });
+    // Pane Dragging
+    const [draggedPaneId, setDraggedPaneId] = useState(null);
 
-    // PDF viewer state
-    const [pdfFile, setPdfFile] = useState(null);
-    const [pdfUrl, setPdfUrl] = useState(null);
+    // Global Media Viewer (Simple version, or we could move to ContentPane if we want per-pane)
+    // The previous dashboard had a global one.
+    // ContentPane has logic to detect media but currently just logs or downloads?
+    // Let's add `onPreviewMedia` to ContentPane props and handle it here.
+    const [mediaFile, setMediaFile] = useState(null);
 
-    // ─── File fetching ───
-    const fetchFiles = useCallback(async () => {
-        setLoading(true);
-
-        // Always try to load from cache first to show something immediately
-        const cacheKey = `files_cache_${currentFolder || 'root'}_${viewScope}`;
-        try {
-            const cached = localStorage.getItem(cacheKey);
-            if (cached) {
-                const parsed = JSON.parse(cached);
-                setFiles(parsed);
-                // We set hasLoadedOnce to true immediately if we have cached data
-                // This prevents the skeleton loader from showing
-                setHasLoadedOnce(true);
-            }
-        } catch (e) { }
-
-        try {
-            const pageSize = 50;
-            const firstRes = viewScope === 'trash'
-                ? await filesAPI.trashPaginated(pageSize, 0)
-                : await filesAPI.listPaginated(currentFolder, pageSize, 0);
-
-            const firstBatch = normalizeListResponse(firstRes?.data);
-
-            // If we have more, fetch next page immediately (simplified for now)
-            let allItems = firstBatch.items;
-
-            if (firstBatch.hasMore) {
-                const secondRes = viewScope === 'trash'
-                    ? await filesAPI.trashPaginated(pageSize, pageSize)
-                    : await filesAPI.listPaginated(currentFolder, pageSize, pageSize);
-                const secondBatch = normalizeListResponse(secondRes?.data);
-                allItems = [...allItems, ...secondBatch.items];
-            }
-
-            setFiles(allItems);
-            setHasLoadedOnce(true);
-
-            // Update cache
-            localStorage.setItem(cacheKey, JSON.stringify(allItems));
-
-        } catch (err) {
-            console.error('Failed to fetch files:', err);
-            setHasLoadedOnce(true);
-        } finally {
-            setLoading(false);
-        }
-    }, [currentFolder, viewScope]);
-
-    // Actually, we want to fetch everytime currentFolder changes, so dependencies are correct.
-
-    useEffect(() => { fetchFiles(); }, [fetchFiles]);
-
-
-
-    // WebSocket Subscription
+    // ─── URL Sync ───
     useEffect(() => {
-        const unsubscribe = subscribe((msg) => {
-            if (msg.type === 'refresh') {
-                const isRelevant = (msg.folder_id == currentFolder) || (!currentFolder && !msg.folder_id);
-                if (isRelevant) {
-                    fetchFiles();
-                }
-            } else if (msg.type === 'refresh_trash' && viewScope === 'trash') {
-                fetchFiles();
+        const folderParam = searchParams.get('folder');
+        const trashParam = searchParams.get('trash');
+
+        let newFolderId = null;
+        let newScope = 'files';
+
+        if (trashParam) {
+            newScope = 'trash';
+        } else if (folderParam) {
+            const numeric = Number(folderParam);
+            if (!Number.isNaN(numeric)) newFolderId = numeric;
+        }
+
+        setPanes(prev => prev.map(p => {
+            if (p.id === activePaneId) {
+                return { ...p, folderId: newFolderId, scope: newScope };
             }
-        });
-        return () => unsubscribe();
-    }, [subscribe, fetchFiles, currentFolder, viewScope]);
-
-    useEffect(() => {
-        const isTrash = searchParams.get('trash') === '1';
-        if (isTrash) {
-            setViewScope('trash');
-            setCurrentFolder(null);
-            setBreadcrumbs([{ id: 'trash', name: 'Trash' }]);
-            return;
-        }
-
-        const folderFromUrl = searchParams.get('folder');
-        setViewScope('files');
-        if (!folderFromUrl) {
-            setCurrentFolder(null);
-            setBreadcrumbs([{ id: null, name: 'Home' }]);
-            return;
-        }
-        const numeric = Number(folderFromUrl);
-        if (!Number.isNaN(numeric) && numeric !== currentFolder) {
-            setCurrentFolder(numeric);
-        }
+            return p;
+        }));
     }, [searchParams]);
 
-    // ─── Activity helpers ───
+    // ─── Activity Helpers ───
     const addActivity = (type, name) => {
         const id = ++activityIdCounter;
-        setActivities((prev) => [{ id, type, name, status: 'running', percent: 0 }, ...prev]);
+        setActivities(prev => [{ id, type, name, status: 'running', percent: 0 }, ...prev]);
         setActivityOpen(true);
         return id;
     };
 
     const updateActivity = (id, updates) => {
-        setActivities((prev) => prev.map((a) => a.id === id ? { ...a, ...updates } : a));
+        setActivities(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
     };
 
-    // ─── Navigation ───
-    const handleNavigate = (folderId, folderName) => {
-        // Close editor when navigating
-        if (editingFile) closeEditor();
+    // ─── Global Callbacks ───
+    const handlePaneFocus = (paneId) => {
+        setActivePaneId(paneId);
+        const pane = panes.find(p => p.id === paneId);
+        if (pane) updateUrl(pane.folderId, pane.scope);
+    };
 
-        setViewScope('files');
-        setCurrentFolder(folderId);
-        navigate(folderId ? `/?folder=${folderId}` : '/', { replace: false });
-        if (folderId === null) {
-            setBreadcrumbs([{ id: null, name: 'Home' }]);
-        } else {
-            setBreadcrumbs((prev) => {
-                const existingIndex = prev.findIndex((b) => b.id === folderId);
-                if (existingIndex > -1) return prev.slice(0, existingIndex + 1);
-                return [...prev, { id: folderId, name: folderName || 'Folder' }];
-            });
+    const updateUrl = (folderId, scope) => {
+        if (scope === 'trash') navigate('/?trash=1', { replace: true });
+        else navigate(folderId ? `/?folder=${folderId}` : '/', { replace: true });
+    };
+
+    const handlePaneNavigate = (paneId, folderId, scope = 'files') => {
+        setPanes(prev => prev.map(p => p.id === paneId ? { ...p, folderId, scope } : p));
+        if (paneId === activePaneId) {
+            updateUrl(folderId, scope);
         }
     };
 
-    // ─── Upload ───
-    const handleUpload = async (fileList) => {
-        for (const file of fileList) {
-            const aid = addActivity('upload', file.name);
-            const formData = new FormData();
-            formData.append('file', file);
-            if (currentFolder) formData.append('parent_id', currentFolder);
-            try {
-                await filesAPI.upload(formData, (pe) => {
-                    updateActivity(aid, { percent: Math.round((pe.loaded * 100) / pe.total) });
-                });
-                updateActivity(aid, { status: 'done', percent: 100 });
-            } catch (err) {
-                console.error('Upload failed:', err);
-                updateActivity(aid, { status: 'error' });
+    const handleSidebarNavigate = (folderId) => {
+        const scope = 'files';
+        handlePaneNavigate(activePaneId, folderId, scope);
+    };
+
+    const handleSplit = (startFolderId, initialFile = null) => {
+        const newPaneId = `pane-${Date.now()}`;
+        setPanes(prev => {
+            if (prev.length >= 2) return prev;
+            return [...prev, { id: newPaneId, folderId: startFolderId, scope: 'files', initialFile }];
+        });
+        setActivePaneId(newPaneId);
+    };
+
+    const handleClosePane = (paneId) => {
+        if (panes.length <= 1) return;
+        setPanes(prev => {
+            const remaining = prev.filter(p => p.id !== paneId);
+            if (activePaneId === paneId) {
+                setActivePaneId(remaining[remaining.length - 1].id);
             }
-        }
-        fetchFiles();
+            return remaining;
+        });
     };
 
-    // ─── Folder Upload ───
-    const handleFolderUpload = async (fileList) => {
-        const aid = addActivity('upload', `Folder upload...`);
-        try {
-            await uploadFolder(fileList, currentFolder, (current, total, status) => {
-                updateActivity(aid, { percent: Math.round((current / total) * 100), name: status });
-            });
-            updateActivity(aid, { status: 'done', percent: 100, name: 'Folder upload complete' });
-            fetchFiles();
-        } catch (err) {
-            console.error('Folder upload failed:', err);
-            updateActivity(aid, { status: 'error', name: 'Folder upload failed' });
-        }
-    };
-
-    // ─── Download ───
-    const handleDownload = async (file) => {
-        const aid = addActivity('download', file.name);
-        try {
-            const res = await filesAPI.download(file.id);
-            window.open(res.data.url, '_blank');
-            updateActivity(aid, { status: 'done' });
-        } catch (err) {
-            console.error('Download failed:', err);
-            updateActivity(aid, { status: 'error' });
-        }
-    };
-
-    // ─── Delete ───
-    const handleDelete = async (file) => {
-        if (window.confirm(`Delete "${file.name}"?`)) {
-            try {
-                if (viewScope === 'trash') {
-                    await filesAPI.emptyTrash();
-                } else {
-                    await filesAPI.delete(file.id);
-                }
-                fetchFiles();
-            } catch (err) {
-                console.error('Delete failed:', err);
-            }
-        }
-    };
-
-    // ─── Rename ───
-    const handleRename = async (file) => {
-        const newName = window.prompt('Enter new name:', file.name);
-        if (newName && newName !== file.name) {
-            try {
-                await filesAPI.rename(file.id, newName);
-                fetchFiles();
-            } catch (err) {
-                console.error('Rename failed:', err);
-            }
-        }
-    };
-
-    // ─── Create folder ───
-    const handleCreateFolder = async (name) => {
-        try {
-            await filesAPI.createFolder(name, currentFolder);
-            fetchFiles();
-        } catch (err) {
-            console.error('Create folder failed:', err);
-        }
-    };
-
-    // ─── Create document ───
-    const handleCreateDocument = async (name, docType) => {
-        const aid = addActivity('upload', `${name} (creating...)`);
-        try {
-            const res = await filesAPI.createDocument(name, docType, currentFolder);
-            updateActivity(aid, { status: 'done', name: res.data.name });
-            fetchFiles();
-            // Auto-open: markdown files go to MarkdownEditor, others to OnlyOffice
-            if (docType === 'markdown') {
-                setMarkdownFile(res.data);
-                setBreadcrumbs((prev) => [...prev, { id: `md-${res.data.id}`, name: res.data.name }]);
-            } else {
-                openEditor(res.data);
-            }
-        } catch (err) {
-            console.error('Create document failed:', err);
-            updateActivity(aid, { status: 'error' });
-        }
-    };
-
-    // ─── Extract ZIP ───
-    const handleExtract = async (file) => {
-        const aid = addActivity('extract', file.name);
-        try {
-            const res = await filesAPI.extractZip(file.id);
-            updateActivity(aid, { status: 'done', name: `${file.name} → ${res.data.extracted_count} files` });
-            fetchFiles();
-        } catch (err) {
-            console.error('Extract failed:', err);
-            updateActivity(aid, { status: 'error' });
-        }
-    };
-
-    // ─── OnlyOffice inline editor ───
-    const openEditor = async (file) => {
-        try {
-            const res = await filesAPI.editorConfig(file.id);
-            setEditingFile(file);
-            setEditorConfig(res.data);
-            // Update breadcrumbs to show the file name
-            setBreadcrumbs((prev) => [...prev, { id: `editor-${file.id}`, name: file.name }]);
-        } catch (err) {
-            console.error('Failed to get editor config:', err);
-        }
-    };
-
-    const closeEditor = async () => {
-        // Force save before closing to ensure S3 is updated
-        if (editorInstanceRef.current) {
-            try {
-                // Trigger OnlyOffice force save via command API
-                editorInstanceRef.current.triggerForceSave && editorInstanceRef.current.triggerForceSave();
-            } catch (e) {
-                console.log('Force save attempt:', e);
-            }
-            // Wait briefly for the save callback to fire
-            await new Promise(resolve => setTimeout(resolve, 1500));
-            try { editorInstanceRef.current.destroyEditor(); } catch (e) { }
-            editorInstanceRef.current = null;
-        }
-        setSaveStatus('saved');
-        setEditingFile(null);
-        setEditorConfig(null);
-        // Remove the editor breadcrumb
-        setBreadcrumbs((prev) => prev.filter((b) => !String(b.id).startsWith('editor-')));
-        // Re-fetch files so the grid is not blank
-        fetchFiles();
-    };
-
-    // Mount OnlyOffice editor when config is ready
-    // IMPORTANT: create the editor div imperatively so React never tries to
-    //   remove DOM nodes that OnlyOffice has modified (fixes removeChild crash)
-    useEffect(() => {
-        if (!editorConfig || !editorContainerRef.current) return;
-
-        // Wipe any previous content and create a fresh div for the editor
-        const container = editorContainerRef.current;
-        container.innerHTML = '';
-        const editorDiv = document.createElement('div');
-        editorDiv.id = 'onlyoffice-editor';
-        editorDiv.style.height = '100%';
-        editorDiv.style.width = '100%';
-        container.appendChild(editorDiv);
-
-        const initEditor = () => {
-            if (editorInstanceRef.current) {
-                try { editorInstanceRef.current.destroyEditor(); } catch (e) { }
-            }
-            // Inject save status tracking event into config
-            const configWithEvents = {
-                ...editorConfig,
-                events: {
-                    ...editorConfig.events,
-                    onDocumentStateChange: (event) => {
-                        // event.data: true = modified, false = saved
-                        setSaveStatus(event.data ? 'unsaved' : 'saved');
-                    },
-                    onAppReady: () => console.log('OnlyOffice Ready'),
-                    onError: (event) => console.error('OnlyOffice Error:', event),
-                },
-            };
-            editorInstanceRef.current = new window.DocsAPI.DocEditor('onlyoffice-editor', configWithEvents);
-        };
-
-        if (window.DocsAPI) {
-            initEditor();
-        } else {
-            const script = document.createElement('script');
-            script.src = `${import.meta.env.VITE_ONLYOFFICE_URL || 'http://localhost:8080'}/web-apps/apps/api/documents/api.js`;
-            script.onload = initEditor;
-            script.onerror = () => console.error('Failed to load OnlyOffice API');
-            document.head.appendChild(script);
-        }
-
-        return () => {
-            if (editorInstanceRef.current) {
-                try { editorInstanceRef.current.destroyEditor(); } catch (e) { }
-                editorInstanceRef.current = null;
-            }
-            // Imperatively wipe so React doesn't try to removeChild on stale nodes
-            container.innerHTML = '';
-        };
-    }, [editorConfig]);
-
-    // ─── Open file ───
-    const handleOpenFile = (file) => {
-        if (file.is_folder) {
-            handleNavigate(file.id, file.name);
-            return;
-        }
-        const ext = file.name.split('.').pop().toLowerCase();
-
-        // Markdown
-        if (file.name.endsWith('.md')) {
-            setMarkdownFile(file);
-            setBreadcrumbs((prev) => [...prev, { id: `md-${file.id}`, name: file.name }]);
-            return;
-        }
-
-        // Media (Video, Audio, Image)
-        const isMedia =
-            file.mime_type?.startsWith('video/') ||
-            file.mime_type?.startsWith('audio/') ||
-            file.mime_type?.startsWith('image/') ||
-            /\.(mp4|webm|ogg|mov|mp3|wav|m4a|jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(file.name);
-
-        if (isMedia) {
-            setMediaFile(file);
-            return;
-        }
-
-        // PDF files → custom viewer
-        if (ext === 'pdf') {
-            (async () => {
-                try {
-                    const res = await filesAPI.download(file.id);
-                    setPdfFile(file);
-                    setPdfUrl(res.data.url);
-                    setBreadcrumbs(prev => [...prev, { id: `pdf-${file.id}`, name: file.name }]);
-                } catch (err) {
-                    console.error('Failed to open PDF:', err);
-                }
-            })();
-            return;
-        }
-
-        // Editable documents
-        const editableExts = ['docx', 'xlsx', 'pptx', 'txt', 'csv', 'odt', 'ods', 'odp', 'rtf'];
-        if (editableExts.includes(ext)) {
-            openEditor(file);
-            return;
-        }
-
-        // Fallback: Download
-        handleDownload(file);
-    };
-
-    // ─── Filtered & sorted files ───
-    const deferredSearchQuery = useDeferredValue(searchQuery);
-
-    // ─── Batch Operations ───
-    const handleBatchDelete = async () => {
-        if (!window.confirm(`Delete ${selectedFiles.length} items?`)) return;
-        try {
-            await filesAPI.batchDelete(selectedIds);
-            setSelectedIds([]);
-            fetchFiles();
-        } catch (err) {
-            console.error('Batch delete failed:', err);
-            alert('Failed to delete items');
-        }
-    };
-
-    const handleBatchCopy = () => {
-        setClipboard({ op: 'copy', items: [...selectedFiles] });
-        setSelectedIds([]);
-    };
-
-    const handleBatchMove = () => {
-        setClipboard({ op: 'move', items: [...selectedFiles] });
-        setSelectedIds([]);
-    };
-
-    const handlePaste = async () => {
+    const onPaste = async (targetFolderId) => {
         if (!clipboard.items.length || !clipboard.op) return;
-        const targetId = currentFolder ? Number(currentFolder) : null;
-        // items are objects, so valid id access
-        const ids = clipboard.items.map(f => Number(f.id));
-
-        const opType = clipboard.op; // 'copy' or 'move'
-        const opName = opType === 'copy' ? 'Copying' : 'Moving';
-
-        let activityName;
-        if (clipboard.items.length === 1) {
-            activityName = `${opName} "${clipboard.items[0].name}"`;
-        } else {
-            activityName = `${opName} ${clipboard.items.length} items`;
-        }
-
-        const aid = addActivity(opType, activityName);
+        const ids = clipboard.items.map(f => f.id);
+        const opName = clipboard.op === 'copy' ? 'Copying' : 'Moving';
+        const aid = addActivity(clipboard.op, `${opName} ${ids.length} items`);
 
         try {
-            console.log('Paste payload:', { ids, targetId, op: clipboard.op });
             if (clipboard.op === 'copy') {
-                await filesAPI.batchCopy(ids, targetId);
+                await filesAPI.batchCopy(ids, targetFolderId);
             } else {
-                await filesAPI.batchMove(ids, targetId);
+                await filesAPI.batchMove(ids, targetFolderId);
             }
             updateActivity(aid, { status: 'done', percent: 100 });
-            fetchFiles();
             setClipboard({ op: null, items: [] });
         } catch (err) {
-            console.error('Paste failed:', err);
             updateActivity(aid, { status: 'error' });
-            const detail = err.response?.data?.detail;
-            alert(`Failed to paste items: ${JSON.stringify(detail) || err.message}`);
+            alert('Paste failed');
         }
     };
 
-    const handleNewFolderWithSelection = () => {
-        setInputModal({
-            title: 'Group Selection',
-            placeholder: 'Enter folder name...',
-            onConfirm: async (name) => {
-                setInputModal(null);
-                if (!name) return;
+    // ContentPane needs a way to Set Clipboard.
+    // We pass `onCopy` and `onCut` callbacks.
+    const handleCopy = (files) => setClipboard({ op: 'copy', items: files });
+    const handleCut = (files) => setClipboard({ op: 'move', items: files });
+    const handleCancelPaste = () => setClipboard({ op: null, items: [] });
 
-                const aid = addActivity('group', `Grouping ${selectedIds.length} items into "${name}"`);
-
-                try {
-                    // 1. Create Folder
-                    const res = await filesAPI.createFolder(name, currentFolder);
-                    const newFolderId = res.data.id;
-
-                    // 2. Move files into it
-                    await filesAPI.batchMove(selectedIds, newFolderId);
-
-                    updateActivity(aid, { status: 'done', percent: 100 });
-
-                    setSelectedIds([]);
-                    fetchFiles();
-                } catch (err) {
-                    console.error('Group failed:', err);
-                    updateActivity(aid, { status: 'error' });
-                    alert('Failed to create folder with selection');
-                }
-            }
-        });
+    // Pane Reordering
+    const handlePaneDragStart = (e, paneId) => {
+        if (panes.length < 2) {
+            e.preventDefault();
+            return;
+        }
+        setDraggedPaneId(paneId);
+        e.dataTransfer.effectAllowed = 'move';
+        // Transparent drag image potentially?
     };
 
+    const handlePaneDragOver = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+    };
 
-    const sortedFiles = useMemo(() => {
-        const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-        const filteredFiles = normalizedQuery
-            ? files.filter((file) => file.name.toLowerCase().includes(normalizedQuery))
-            : files;
+    const handlePaneDrop = (e, targetPaneId) => {
+        e.preventDefault();
+        if (!draggedPaneId || draggedPaneId === targetPaneId) return;
 
-        return [...filteredFiles].sort((a, b) => {
-            if (a.is_folder && !b.is_folder) return -1;
-            if (!a.is_folder && b.is_folder) return 1;
-            return new Date(b.created_at) - new Date(a.created_at);
+        // Swap logic
+        setPanes(prev => {
+            const newPanes = [...prev];
+            const idx1 = newPanes.findIndex(p => p.id === draggedPaneId);
+            const idx2 = newPanes.findIndex(p => p.id === targetPaneId);
+            if (idx1 > -1 && idx2 > -1) {
+                [newPanes[idx1], newPanes[idx2]] = [newPanes[idx2], newPanes[idx1]];
+            }
+            return newPanes;
         });
-    }, [files, deferredSearchQuery]);
+        setDraggedPaneId(null);
+    };
+
+    // Refs for accessing imperative handles of ContentPanes
+    const paneRefs = useRef({});
+
+    // ─── Sidebar Actions (Trigger on Active Pane) ───
+    const handleSidebarAction = (action) => {
+        const ref = paneRefs.current[activePaneId];
+        if (!ref) return;
+
+        switch (action) {
+            case 'createFolder':
+                ref.promptCreateFolder && ref.promptCreateFolder();
+                break;
+            case 'upload':
+                ref.triggerUpload && ref.triggerUpload();
+                break;
+            case 'createDocument':
+                ref.promptCreateDocument && ref.promptCreateDocument();
+                break;
+            case 'search':
+                ref.openSearch && ref.openSearch();
+                break;
+        }
+    };
 
     return (
         <div className="flex h-screen bg-[var(--bg-primary)] transition-colors duration-200 main-content-area">
             <div className="desktop-sidebar">
                 <Sidebar
-                    currentFolder={currentFolder}
-                    onNavigate={handleNavigate}
-                    onCreateFolder={handleCreateFolder}
-                    onUpload={handleUpload}
-                    onCreateDocument={handleCreateDocument}
-                    onOpenTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
-                    onOpenSearch={() => setSearchOpen(true)}
+                    currentFolder={panes.find(p => p.id === activePaneId)?.folderId}
+                    onNavigate={handleSidebarNavigate}
+                    onCreateFolder={() => handleSidebarAction('createFolder')}
+                    onUpload={() => handleSidebarAction('upload')}
+                    onCreateDocument={() => handleSidebarAction('createDocument')}
+                    onOpenTrash={() => handlePaneNavigate(activePaneId, null, 'trash')}
+                    onOpenSearch={() => handleSidebarAction('search')}
                     collapsed={sidebarCollapsed}
-                    onToggleCollapse={() => setSidebarCollapsed((p) => !p)}
+                    onToggleCollapse={() => setSidebarCollapsed(p => !p)}
                 />
             </div>
 
-            <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                <Navbar
-                    breadcrumbs={breadcrumbs}
-                    onBreadcrumbClick={(id) => {
-                        if (String(id).startsWith('editor-')) return;
-                        if (editingFile) closeEditor();
-                        if (markdownFile) {
-                            setMarkdownFile(null);
-                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
-                        }
-                        if (pdfFile) {
-                            setPdfFile(null); setPdfUrl(null);
-                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('pdf-')));
-                        }
-                        handleNavigate(id, breadcrumbs.find((b) => b.id === id)?.name);
-                    }}
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    viewMode={viewMode}
-                    onViewModeChange={setViewMode}
-                    onUpload={handleUpload}
-                    onUploadFolder={handleFolderUpload}
-                    onToggleActivity={() => setActivityOpen((p) => !p)}
-                    showBackButton={!!editingFile || !!markdownFile || !!pdfFile}
-                    onOpenSearch={() => setSearchOpen(true)}
-                    onBack={() => {
-                        if (markdownFile) {
-                            setMarkdownFile(null);
-                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
-                            fetchFiles();
-                        } else if (pdfFile) {
-                            setPdfFile(null); setPdfUrl(null);
-                            setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('pdf-')));
-                            fetchFiles();
-                        } else {
-                            closeEditor();
-                        }
-                    }}
-                />
+            <main className="flex-1 flex overflow-hidden relative">
+                {panes.map((pane, index) => (
+                    <div
+                        key={pane.id}
+                        className={`flex-1 flex flex-col min-w-0 overflow-hidden relative transition-all duration-300 ${index > 0 ? "border-l border-[var(--border-color)]" : ""}`}
+                        onDragOver={handlePaneDragOver}
+                        onDrop={(e) => handlePaneDrop(e, pane.id)}
+                    >
+                        {panes.length > 1 && (
+                            <div
+                                draggable
+                                onDragStart={(e) => handlePaneDragStart(e, pane.id)}
+                                className={`h-7 flex items-center justify-between px-2 cursor-grab active:cursor-grabbing border-b border-[var(--border-color)] ${pane.id === activePaneId ? 'bg-[var(--bg-secondary)]' : 'bg-[var(--bg-primary)]'}`}
+                                onClick={() => handlePaneFocus(pane.id)}
+                            >
+                                <div className="flex items-center gap-2">
+                                    <GripHorizontal className="w-4 h-4 text-[var(--text-tertiary)]" />
+                                    <span className="text-xs text-[var(--text-tertiary)] font-medium">Pane {index + 1}</span>
+                                </div>
+                                <button onClick={() => handleClosePane(pane.id)} className="p-0.5 rounded hover:bg-[var(--card-hover)]">
+                                    <X className="w-3.5 h-3.5 text-[var(--text-tertiary)]" />
+                                </button>
+                            </div>
+                        )}
 
-                <div className="flex flex-1 overflow-hidden">
-                    {/* Main content area */}
-                    <div className="flex-1 overflow-y-auto">
-                        {/* Inline OnlyOffice Editor — always mounted, shown/hidden via CSS
-                            to prevent React removeChild crash when OnlyOffice modifies the DOM */}
-                        <div
-                            ref={editorContainerRef}
-                            className="h-full w-full"
-                            style={{ display: editingFile ? 'block' : 'none' }}
+                        <ContentPane
+                            ref={(el) => {
+                                if (el) paneRefs.current[pane.id] = el;
+                                else delete paneRefs.current[pane.id];
+                            }}
+                            paneId={pane.id}
+                            isActive={pane.id === activePaneId}
+                            initialFolder={pane.folderId}
+                            initialScope={pane.scope}
+                            initialFile={pane.initialFile} // Added prop
+                            onFocus={() => handlePaneFocus(pane.id)}
+                            onNavigate={(fid) => handlePaneNavigate(pane.id, fid)}
+                            onSplit={handleSplit}
+                            // onClose={() => handleClosePane(pane.id)} // Handled by the button in the header
+
+                            addActivity={addActivity}
+                            updateActivity={updateActivity}
+
+                            clipboard={clipboard}
+                            onPaste={onPaste}
+                            onCopy={handleCopy}
+                            onCut={handleCut}
+                            onCancelPaste={handleCancelPaste}
+
+                            wsSubscribe={subscribe}
+                            className="" // We handled border in wrapper
+
+                            // Media
+                            onPreviewMedia={setMediaFile}
                         />
-
-                        {/* Markdown Editor — shown when a .md file is open */}
-                        {markdownFile && (
-                            <div className="h-full w-full">
-                                <MarkdownEditor
-                                    file={markdownFile}
-                                    onClose={() => {
-                                        setMarkdownFile(null);
-                                        setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('md-')));
-                                        fetchFiles();
-                                    }}
-                                />
-                            </div>
-                        )}
-
-                        {/* PDF Viewer — shown when a .pdf file is open */}
-                        {pdfFile && pdfUrl && (
-                            <div className="h-full w-full">
-                                <PdfViewer
-                                    file={pdfFile}
-                                    fileUrl={pdfUrl}
-                                    onClose={() => {
-                                        setPdfFile(null); setPdfUrl(null);
-                                        setBreadcrumbs(prev => prev.filter(b => !String(b.id).startsWith('pdf-')));
-                                        fetchFiles();
-                                    }}
-                                />
-                            </div>
-                        )}
-
-                        {/* Floating Save Status Badge */}
-                        {editingFile && (
-                            <div style={{
-                                position: 'fixed',
-                                top: '8px',
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                zIndex: 999999,
-                                pointerEvents: 'none',
-                                transition: 'opacity 0.3s ease',
-                            }}>
-                                {saveStatus === 'saved' ? (
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        padding: '10px 18px',
-                                        borderRadius: '10px',
-                                        backgroundColor: 'rgba(6, 95, 70, 0.95)',
-                                        color: '#d1fae5',
-                                        fontSize: '13px',
-                                        fontWeight: '600',
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-                                        backdropFilter: 'blur(10px)',
-                                    }}>
-                                        <span style={{ fontSize: '16px' }}>✓</span> Saved to S3
-                                    </div>
-                                ) : (
-                                    <div style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        padding: '10px 18px',
-                                        borderRadius: '10px',
-                                        backgroundColor: 'rgba(146, 64, 14, 0.95)',
-                                        color: '#fef3c7',
-                                        fontSize: '13px',
-                                        fontWeight: '600',
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.35)',
-                                        backdropFilter: 'blur(10px)',
-                                    }}>
-                                        <span style={{ fontSize: '16px' }}>●</span> Unsaved Changes
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* File Grid — hidden when editor is open */}
-                        <div className="px-5 py-4 smooth-panel flex-1 h-full" style={{ display: (editingFile || markdownFile || pdfFile) ? 'none' : 'block' }}>
-
-
-                            {viewScope === 'trash' && (
-                                <div className="mb-3 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--bg-secondary)] px-3 py-2 text-xs text-[var(--text-secondary)]">
-                                    <span>Trash keeps deleted files for 30 days.</span>
-                                    <div className="flex gap-2">
-                                        <button className="px-2.5 py-1 rounded bg-[var(--card-bg)] border border-[var(--border-color)]" onClick={async () => { if (selectedFiles[0]) { await filesAPI.restoreFromTrash(selectedFiles[0].id); fetchFiles(); } }}>Restore selected</button>
-                                        <button className="px-2.5 py-1 rounded bg-red-500/20 text-red-300 border border-red-500/40" onClick={async () => { if (window.confirm('Empty trash permanently?')) { await filesAPI.emptyTrash(); fetchFiles(); } }}>Empty trash</button>
-                                    </div>
-                                </div>
-                            )}
-                            {!hasLoadedOnce && loading ? (
-                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 py-2">
-                                    {Array.from({ length: 10 }).map((_, i) => (
-                                        <div key={i} className="h-28 rounded-xl border border-[var(--border-color)] bg-[var(--bg-secondary)] flex items-center justify-center"><Loader className="scale-50" /></div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <FileGrid
-                                    files={sortedFiles}
-                                    viewMode={viewMode}
-                                    onOpen={handleOpenFile}
-                                    onDownload={handleDownload}
-                                    onDelete={handleDelete}
-                                    onRename={handleRename}
-                                    onExtract={handleExtract}
-                                    onCreateFolder={handleCreateFolder}
-                                    onUpload={handleUpload}
-                                    onCreateDocument={handleCreateDocument}
-                                    onRefresh={fetchFiles}
-                                    selectedIds={selectedIds}
-                                    onSelectionChange={setSelectedIds}
-                                    onMobileAction={isMobile ? setMobileActionFile : undefined}
-                                    onShare={setShareFile}
-                                    clipboardState={clipboard}
-                                    onPaste={handlePaste}
-                                />
-                            )}
-                        </div>
                     </div>
-
-                    {/* Modals */}
-                    {inputModal && <InputModal {...inputModal} onCancel={() => setInputModal(null)} />}
-                    <SearchModal
-                        open={searchOpen}
-                        onClose={() => setSearchOpen(false)}
-                        currentFolder={currentFolder}
-                        includeTrashed={viewScope === 'trash'}
-                        onOpenResult={(item) => handleOpenFile(item)}
-                    />
-
-                    {shareFile && (
-                        <ShareModal
-                            file={shareFile}
-                            onClose={() => setShareFile(null)}
-                        />
-                    )}
-
-                    {mediaFile && (isMobile ? (
-                        <MobileMediaViewer
-                            file={mediaFile}
-                            onClose={() => setMediaFile(null)}
-                        />
-                    ) : (
-                        <MediaViewerModal
-                            file={mediaFile}
-                            onClose={() => setMediaFile(null)}
-                        />
-                    ))}
-
-                    {/* Activity Bar */}
-                    <ActivityBar
-                        activities={activities}
-                        open={activityOpen}
-                        onClose={() => setActivityOpen(false)}
-                    />
-                </div>
+                ))}
             </main>
 
-            {/* Mobile bottom nav */}
+            <ActivityBar
+                activities={activities}
+                open={activityOpen}
+                onClose={() => setActivityOpen(false)}
+            />
+
+            {mediaFile && (isMobile ? (
+                <MobileMediaViewer file={mediaFile} onClose={() => setMediaFile(null)} />
+            ) : (
+                <MediaViewerModal file={mediaFile} onClose={() => setMediaFile(null)} />
+            ))}
+
             {isMobile && (
                 <MobileNav
-                    activeTab={viewScope === 'trash' ? 'trash' : 'home'}
-                    onHome={() => { setViewScope('files'); handleNavigate(null, 'Home'); }}
-                    onSearch={() => setSearchOpen(true)}
-                    onUpload={handleUpload}
-                    onCreateFolder={handleCreateFolder}
-                    onCreateDocument={handleCreateDocument}
-                    onTrash={() => { setViewScope('trash'); setCurrentFolder(null); setBreadcrumbs([{ id: 'trash', name: 'Trash' }]); navigate('/?trash=1', { replace: false }); }}
+                    activeTab={panes[0].scope === 'trash' ? 'trash' : 'home'}
+                    onHome={() => handlePaneNavigate(activePaneId, null)}
+                    onSearch={() => handleSidebarAction('search')}
+                    onUpload={() => handleSidebarAction('upload')}
+                    onCreateFolder={() => handleSidebarAction('createFolder')}
+                    onCreateDocument={() => handleSidebarAction('createDocument')}
+                    onTrash={() => handlePaneNavigate(activePaneId, null, 'trash')}
                     onNavigateSettings={() => navigate('/settings')}
                 />
             )}
-
-            {/* Mobile action sheet */}
-            {mobileActionFile && (
-                <MobileActionSheet
-                    file={mobileActionFile}
-                    onClose={() => setMobileActionFile(null)}
-                    onDownload={handleDownload}
-                    onRename={handleRename}
-                    onDelete={handleDelete}
-                    onShare={(f) => { setMobileActionFile(null); setShareFile(f); }}
-                    onExtract={handleExtract}
-                />
-            )}
-
-            <SelectionBar
-                selectedCount={selectedFiles.length}
-                onClear={() => setSelectedIds([])}
-                onDelete={handleBatchDelete}
-                onCopy={handleBatchCopy}
-                onMove={handleBatchMove}
-                onNewFolderWithSelection={handleNewFolderWithSelection}
-                clipboardState={clipboard}
-                onPaste={handlePaste}
-                onCancelPaste={() => setClipboard({ op: null, items: [] })}
-            />
         </div>
     );
 }

@@ -4,7 +4,8 @@ import {
     File, FileText, Image, Film, Music, Archive, Code,
     Folder, FolderOpen, MoreVertical, Download, Pencil, Trash2,
     FileSpreadsheet, FileImage, Presentation, FolderPlus, Upload,
-    FileType, Sheet, MonitorPlay, PackageOpen, RefreshCw, Share2, Clipboard
+    FileType, Sheet, MonitorPlay, PackageOpen, RefreshCw, Share2, Clipboard,
+    Columns
 } from 'lucide-react';
 import { filesAPI } from '../utils/api';
 import ShareModal from './ShareModal';
@@ -268,6 +269,7 @@ export default function FileGrid({
     onMobileAction,
     onShare,
     selectedIds,
+    onSplit // New prop for Split Screen
 }) {
     const [ctxMenu, setCtxMenu] = useState(null);
     const [inputModal, setInputModal] = useState(null);
@@ -307,6 +309,11 @@ export default function FileGrid({
 
         if (file) {
             // File-specific menu
+            if (onSplit) {
+                items.push({ icon: Columns, label: 'Open side-by-side', action: () => onSplit(file) });
+                items.push({ divider: true });
+            }
+
             if (!file.is_folder) {
                 items.push({ icon: Download, label: 'Download', action: () => onDownload(file) });
             }

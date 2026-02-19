@@ -59,6 +59,7 @@ function HomeRoute() {
 }
 
 import ChatSidebar from './components/ai/ChatSidebar';
+import GlobalPlayer from './components/GlobalPlayer';
 
 export default function App() {
   return (
@@ -137,6 +138,7 @@ export default function App() {
           />
         </Routes>
       </Suspense>
+      <GlobalPlayer />
     </Router>
   );
 }
