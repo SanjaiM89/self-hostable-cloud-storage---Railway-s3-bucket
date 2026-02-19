@@ -35,7 +35,7 @@ class RecommendationEngine:
 
         # Trigger lazy playlist generation (approx every 5th play or so to save resources, or just always check strict time)
         # For now, let's just trigger it.
-        self.generate_daily_mix(db, user_id)
+        self.generate_all_mixes(db, user_id)
 
     def generate_mix(self, db: Session, user_id: int, name: str, strategy: str = "daily"):
         """Generate or update a playlist based on strategy."""
