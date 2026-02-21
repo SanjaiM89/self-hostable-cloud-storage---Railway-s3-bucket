@@ -1,21 +1,78 @@
 version: '3.8'
 
 services:
+  # ─── PostgreSQL Database ───
   db:
     image: postgres:15
     container_name: cloud_storage_db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER:-clouduser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudpass}
+      POSTGRES_DB: ${POSTGRES_DB:-clouddb}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clouduser}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ─── Backend + Frontend (Single Container) ───
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-}
+    container_name: cloud_storage_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Database - use internal Docker network hostname
+      DATABASE_URL: postgresql://${POSTGRES_USER:-clouduser}:${POSTGRES_PASSWORD:-cloudpass}@db:5432/${POSTGRES_DB:-clouddb}
+
+      # S3 Storage
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
+      S3_REGION_NAME: ${S3_REGION_NAME:-auto}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+
+      # OnlyOffice
+      ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-supersecretjwtkeysupersecretjwtkey}
+      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice:80}
+
+      # Auth
+      SECRET_KEY: ${SECRET_KEY:-supersecretauthkey}
+      ALGORITHM: ${ALGORITHM:-RS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+
+      # Admin defaults
+      DEFAULT_ADMIN_USERNAME: ${DEFAULT_ADMIN_USERNAME:-admin}
+      DEFAULT_ADMIN_EMAIL: ${DEFAULT_ADMIN_EMAIL:-admin@gmail.com}
+      DEFAULT_ADMIN_PASSWORD: ${DEFAULT_ADMIN_PASSWORD:-admin}
+
+      # Razorpay
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+
+      # Frontend static files directory
+      STATIC_DIR: /app/static
+    volumes:
+      - app_data:/app/data
+
+  # ─── OnlyOffice Document Server ───
   onlyoffice:
     image: onlyoffice/documentserver
     container_name: cloud_storage_onlyoffice
+    restart: unless-stopped
     ports:
       - "8080:80"
       - "4433:443"
@@ -23,7 +80,7 @@ services:
       - "host.docker.internal:host-gateway"
     environment:
       - JWT_ENABLED=true
-      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET}
+      - JWT_SECRET=${ONLYOFFICE_JWT_SECRET:-supersecretjwtkeysupersecretjwtkey}
       - JWT_HEADER=Authorization
       - JWT_IN_BODY=true
     volumes:
@@ -34,6 +91,7 @@ services:
 
 volumes:
   postgres_data:
+  app_data:
   onlyoffice_data:
   onlyoffice_log:
   onlyoffice_lib:

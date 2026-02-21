@@ -1,0 +1,27 @@
+# Dependencies & environments
+node_modules
+venv312
+venv
+__pycache__
+*.pyc
+
+# Build artifacts
+frontend/dist
+*.egg-info
+
+# Git
+.git
+.gitignore
+
+# Dev files
+.env.local
+*.md
+test_*
+data/
+certs/
+cloudflared
+lazyio-main/
+
+# IDE
+.vscode
+.idea

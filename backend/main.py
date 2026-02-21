@@ -1,7 +1,8 @@
 from fastapi import FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import Response, FileResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 # ... (database imports)
@@ -105,15 +106,23 @@ except Exception as e:
 app = FastAPI(title="Cloud Storage API")
 
 # CORS: allow all origins without credentials (wildcard + credentials is invalid)
+# Build allowed origins list
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:8000",
+    "https://lazycloudio.vercel.app",
+    "https://self-hostable-cloud-storage-railway-flax.vercel.app",
+    "https://self-hostable-cloud-storage-railway.vercel.app",
+]
+# Add any custom origin from env (e.g. your deployed domain)
+custom_origin = os.environ.get("CORS_ORIGIN")
+if custom_origin:
+    allowed_origins.append(custom_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "https://lazycloudio.vercel.app",
-        "https://self-hostable-cloud-storage-railway-flax.vercel.app",
-        "https://self-hostable-cloud-storage-railway.vercel.app"
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -155,3 +164,19 @@ if not IS_VERCEL:
             manager.disconnect(websocket)
         except Exception:
             manager.disconnect(websocket)
+
+# ─── Serve Frontend Static Files (Docker / Production) ───
+STATIC_DIR = os.environ.get("STATIC_DIR")
+if STATIC_DIR and os.path.isdir(STATIC_DIR):
+    # Mount static assets (JS, CSS, images)
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="static-assets")
+
+    # Catch-all: serve index.html for any non-API, non-WS route (SPA client-side routing)
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # If a static file exists at that path, serve it
+        file_path = os.path.join(STATIC_DIR, full_path)
+        if full_path and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        # Otherwise serve index.html for client-side routing
+        return FileResponse(os.path.join(STATIC_DIR, "index.html"))
