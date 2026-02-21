@@ -1,25 +1,6 @@
 version: '3.8'
 
 services:
-  # ─── PostgreSQL Database ───
-  db:
-    image: postgres:15
-    container_name: cloud_storage_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-clouduser}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cloudpass}
-      POSTGRES_DB: ${POSTGRES_DB:-clouddb}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clouduser}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   # ─── Backend + Frontend (Single Container) ───
   app:
     build:
@@ -31,12 +12,9 @@ services:
     restart: unless-stopped
     ports:
       - "${APP_PORT:-8000}:8000"
-    depends_on:
-      db:
-        condition: service_healthy
     environment:
-      # Database - use internal Docker network hostname
-      DATABASE_URL: postgresql://${POSTGRES_USER:-clouduser}:${POSTGRES_PASSWORD:-cloudpass}@db:5432/${POSTGRES_DB:-clouddb}
+      # Database
+      DATABASE_URL: ${DATABASE_URL}
 
       # S3 Storage
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL}
@@ -47,7 +25,7 @@ services:
 
       # OnlyOffice
       ONLYOFFICE_JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:-supersecretjwtkeysupersecretjwtkey}
-      ONLYOFFICE_URL: ${ONLYOFFICE_URL:-http://onlyoffice:80}
+      ONLYOFFICE_URL: http://onlyoffice:80
 
       # Auth
       SECRET_KEY: ${SECRET_KEY:-supersecretauthkey}
@@ -90,7 +68,6 @@ services:
       - onlyoffice_db:/var/lib/postgresql
 
 volumes:
-  postgres_data:
   app_data:
   onlyoffice_data:
   onlyoffice_log:
