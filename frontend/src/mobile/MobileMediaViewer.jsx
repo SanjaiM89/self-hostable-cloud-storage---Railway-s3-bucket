@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { X, Download } from 'lucide-react';
 import { filesAPI } from '../utils/api';
 import Loader from '../components/Loader';
+import VideoPlayer from '../components/VideoPlayer';
 
 export default function MobileMediaViewer({ file, onClose }) {
     const [url, setUrl] = useState(null);
@@ -103,12 +104,9 @@ export default function MobileMediaViewer({ file, onClose }) {
                         style={{ touchAction: 'pinch-zoom' }}
                     />
                 ) : isVideo ? (
-                    <video
+                    <VideoPlayer
                         src={url}
-                        controls
-                        playsInline
-                        className="max-w-full max-h-full"
-                        style={{ touchAction: 'none' }}
+                        fileName={file.name}
                     />
                 ) : isAudio ? (
                     <div className="w-full px-8">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Download, Play, Pause, Volume2, VolumeX, Maximize, Minimize } from 'lucide-react';
 import { filesAPI } from '../utils/api';
 import Loader from './Loader';
+import VideoPlayer from './VideoPlayer';
 
 export default function MediaViewerModal({ file, onClose }) {
     const [url, setUrl] = useState(null);
@@ -67,15 +68,10 @@ export default function MediaViewerModal({ file, onClose }) {
 
         if (isVideo) {
             return (
-                <video
-                    ref={videoRef}
-                    src={url}
-                    controls
-                    autoPlay
-                    className="max-h-[80vh] max-w-full rounded-lg shadow-2xl bg-black"
-                >
-                    Your browser does not support the video tag.
-                </video>
+                <VideoPlayer 
+                    src={url} 
+                    fileName={file.name}
+                />
             );
         }
 
