@@ -17,6 +17,7 @@ class User(Base):
     storage_limit = Column(BigInteger, default=2 * 1024 * 1024 * 1024)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     ai_config = Column(JSON, default={})
+    api_key = Column(String, unique=True, index=True, nullable=True)
     
     plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
     subscription_expiry = Column(DateTime, nullable=True)

@@ -67,6 +67,10 @@ def ensure_schema_updates():
             conn.execute(text("ALTER TABLE playlists ADD COLUMN last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP"))
         except Exception:
             pass
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN api_key VARCHAR UNIQUE"))
+        except Exception:
+            pass
 
 
 def ensure_default_admin_user():
@@ -145,6 +149,12 @@ api_router.include_router(admin.router)
 api_router.include_router(plans.router, prefix="/plans", tags=["plans"])
 api_router.include_router(payments.router, prefix="/payments", tags=["payments"])
 api_router.include_router(music.router)
+
+try:
+    from .routers import api_integration
+except ImportError:
+    from routers import api_integration
+api_router.include_router(api_integration.router)
 
 app.include_router(api_router)
 

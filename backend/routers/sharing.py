@@ -14,12 +14,12 @@ try:
     from ..database import get_db
     from ..models import File as FileModel, User, FileShare
     from ..auth.utils import decode_access_token
-    from ..storage import generate_presigned_url, s3_client, BUCKET_NAME
+    from ..s3.client import generate_presigned_url, s3_client, BUCKET_NAME
 except ImportError:
     from database import get_db
     from models import File as FileModel, User, FileShare
     from auth.utils import decode_access_token
-    from storage import generate_presigned_url, s3_client, BUCKET_NAME
+    from s3.client import generate_presigned_url, s3_client, BUCKET_NAME
 from fastapi.security import OAuth2PasswordBearer
 
 router = APIRouter(prefix="/shares", tags=["shares"])

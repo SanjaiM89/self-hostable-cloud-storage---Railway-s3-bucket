@@ -125,9 +125,9 @@ async def process_download(task_id: str, db: Session, user: User, music_folder_i
         
         # 1. Upload to S3 (non-blocking) with User Isolation
         try:
-            from backend.storage import upload_file_to_s3, BUCKET_NAME
+            from backend.s3.client import upload_file_to_s3, BUCKET_NAME
         except ImportError:
-            from storage import upload_file_to_s3, BUCKET_NAME
+            from s3.client import upload_file_to_s3, BUCKET_NAME
             
         # SECURE: User-specific prefix to prevent collision and leakage
         s3_key = f"LazyioMusic/{user.id}/{os.path.basename(downloaded_file)}"

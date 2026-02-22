@@ -86,3 +86,19 @@ def me(current_user: User = Depends(get_current_user)):
         "storage_limit": current_user.storage_limit,
         "ai_config": current_user.ai_config
     }
+
+# ─── API Key Endpoints ───
+@router.post("/api-key/generate")
+def generate_api_key(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Generate a new API key for the current user."""
+    import secrets
+    new_api_key = secrets.token_urlsafe(32)
+    current_user.api_key = new_api_key
+    db.commit()
+    return {"api_key": new_api_key}
+
+@router.get("/api-key/my-key")
+def get_my_api_key(current_user: User = Depends(get_current_user)):
+    """Get the current user's API key."""
+    return {"api_key": current_user.api_key}
+

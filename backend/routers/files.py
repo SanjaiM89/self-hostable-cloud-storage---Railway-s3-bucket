@@ -11,13 +11,13 @@ try:
     from ..database import get_db
     from ..models import File as FileModel, User
     from ..auth.utils import decode_access_token
-    from .storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+    from ..s3.client import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME, TEMP_BUCKET_NAME
     from ..ws_manager import manager
 except ImportError:
     from database import get_db
     from models import File as FileModel, User
     from auth.utils import decode_access_token
-    from storage import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME
+    from s3.client import upload_file_to_s3, generate_presigned_url, s3_client, BUCKET_NAME, TEMP_BUCKET_NAME
     from ws_manager import manager
 
 from fastapi.security import OAuth2PasswordBearer
@@ -26,7 +26,6 @@ import uuid
 import datetime
 import os
 
-TEMP_BUCKET_NAME = os.getenv("TEMP_BUCKET_NAME", f"{BUCKET_NAME}-trash")
 TRASH_RETENTION_DAYS = 30
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -1048,9 +1047,9 @@ async def onlyoffice_callback(
                              # We can use upload_file_to_s3 which expects file-like object
                              # Need to import it
                              try:
-                                 from ..storage import upload_file_to_s3
+                                 from ..s3.client import upload_file_to_s3
                              except ImportError:
-                                 from storage import upload_file_to_s3
+                                 from s3.client import upload_file_to_s3
 
                              # Reset pointer
                              file_obj.seek(0)

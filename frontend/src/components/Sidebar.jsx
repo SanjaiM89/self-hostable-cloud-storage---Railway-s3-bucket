@@ -5,10 +5,12 @@ import { useNavigate } from 'react-router-dom';
 import { filesAPI } from '../utils/api';
 import { Tree } from './ui/file-tree';
 import InputModal from './InputModal';
+import APIIntegrationModal from './APIIntegrationModal';
 
 export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onUpload, onCreateDocument, collapsed, onToggleCollapse, onOpenTrash, onOpenSearch }) {
     const [inputModal, setInputModal] = useState(null);
     const [quickOpen, setQuickOpen] = useState(false);
+    const [apiModalOpen, setApiModalOpen] = useState(false);
     const [storage, setStorage] = useState({ used: 0, total: 2 * 1024 * 1024 * 1024 });
     const [folderTree, setFolderTree] = useState([]);
     const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -175,6 +177,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 <div className="px-3 py-2 border-t border-[var(--sidebar-border)]">
                     <button onClick={() => navigate('/music')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Music className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Music</button>
                     <button onClick={onOpenTrash} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Trash2 className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Trash</button>
+                    <button onClick={() => setApiModalOpen(true)} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Code className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />API Integration</button>
                     {user?.is_admin && (
                         <button onClick={() => navigate('/admin')} className="nav-item flex items-center gap-2.5 px-2.5 py-[7px] text-[13px] text-[var(--sidebar-text)] w-full"><Shield className="w-4 h-4 app-icon-solid" strokeWidth={2.35} />Admin</button>
                     )}
@@ -192,6 +195,7 @@ export default function Sidebar({ currentFolder, onNavigate, onCreateFolder, onU
                 <GripVertical className="mx-auto w-3 h-3 text-[var(--sidebar-text)] opacity-70" strokeWidth={2.3} />
             </button>
             {inputModal && <InputModal {...inputModal} />}
+            <APIIntegrationModal isOpen={apiModalOpen} onClose={() => setApiModalOpen(false)} />
         </aside>
     );
 }

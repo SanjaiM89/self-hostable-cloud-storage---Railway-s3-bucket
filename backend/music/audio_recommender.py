@@ -8,8 +8,6 @@ logger = logging.getLogger("AudioRecommender")
 
 try:
     import numpy as np
-    import faiss
-    import essentia.standard as es
     DEPENDENCIES_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Audio Recommendation dependencies missing: {e}. Feature disabled.")
@@ -33,10 +31,14 @@ class AudioRecommender:
         self.map_id_to_vector = {} # In-memory map for quick lookups
         self.map_index_to_song_id = {} # Map faiss index ID to song ID
         self.dimension = 0
+        self.dimension = 0
+        self.is_ready = False
         if not DEPENDENCIES_AVAILABLE:
             logger.warning("AudioRecommender initialized but dependencies are missing.")
         else:
-            self.load_index()
+            # Load in background so it doesn't block FastAPI startup
+            import threading
+            threading.Thread(target=self.load_index, daemon=True).start()
         
     def _extract_features(self, file_path: str) -> List[float]:
         if not DEPENDENCIES_AVAILABLE:
@@ -47,6 +49,7 @@ class AudioRecommender:
         Returns a normalized vector.
         """
         try:
+            import essentia.standard as es
             # Load audio (downsample to 22k for speed, mono)
             # Ensure file exists
             if not os.path.exists(file_path):
@@ -102,6 +105,7 @@ class AudioRecommender:
         if not DEPENDENCIES_AVAILABLE:
             return
             
+        import faiss
         self.dimension = dimension
         self.index = faiss.IndexFlatL2(dimension) # L2 distance (Euclidean)
         self.map_index_to_song_id = {}
@@ -129,7 +133,7 @@ class AudioRecommender:
 
     def find_similar(self, song_id: int, limit: int = 5) -> List[int]:
         """Find similar songs by ID"""
-        if not DEPENDENCIES_AVAILABLE or self.index is None or str(song_id) not in self.map_id_to_vector:
+        if not self.is_ready or not DEPENDENCIES_AVAILABLE or self.index is None or str(song_id) not in self.map_id_to_vector:
             return []
             
         query_vector = np.array([self.map_id_to_vector[str(song_id)]], dtype='float32')
@@ -164,6 +168,7 @@ class AudioRecommender:
             return
             
         try:
+            import faiss
             faiss.write_index(self.index, INDEX_PATH)
             
             # Convert int keys to str for JSON
@@ -186,6 +191,7 @@ class AudioRecommender:
             
         if os.path.exists(INDEX_PATH) and os.path.exists(MAP_PATH):
             try:
+                import faiss
                 self.index = faiss.read_index(INDEX_PATH)
                 with open(MAP_PATH, 'r') as f:
                     data = json.load(f)
@@ -195,6 +201,7 @@ class AudioRecommender:
                 logger.info("Loaded audio index from disk.")
             except Exception as e:
                 logger.error(f"Failed to load index: {e}")
+        self.is_ready = True
 
 # Singleton instance
 audio_recommender = AudioRecommender()
